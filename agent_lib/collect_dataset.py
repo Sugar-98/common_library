@@ -4,44 +4,46 @@ import re
 import subprocess
 import sys
 import time
+from pathlib import Path
 
 
 def main():
 #-----------------------------Configuration parameters------------------------------
-    script_path = "/home/workspace/carla_garage/leaderboard/leaderboard/leaderboard_evaluator_local.py"#main script to run the simulation
-    working_directory = "/home/workspace/carla_garage"
+    root = Path(__file__).resolve().parent.parent.parent
+    carla_garage_root = (root/"carla_garage").as_posix()
+    script_path = f"{carla_garage_root}/leaderboard/leaderboard/leaderboard_evaluator_local.py"#main script to run the simulation
+    common_library_root = (root/"common_library").as_posix()
 
     #Tunable parameter
-    repetitions_for_scenario = None
-    data_root = "/home/workspace/carla_garage/data"
-    scenario_path = f"{data_root}/*lb1_split_copy*/*/"
-    repetitions = "1"
+    num_scenes = None #Number of scenes(xml files) executed for each scenario(e.g. AccidentTwoWays, BlockedIntersection, ...). 
+    scenario_path =  f"{carla_garage_root}/data/*50x38_Town12*/*/"
+    repetitions = "1" #Repetitions for each scenes
     trafficmanagerseed = "0"
-    save_path = "/home/workspace/logs/dataset_dist/scenario"
-    host = "172.27.160.1"
-    trafficmanagerport = "2003"
+    save_path = (root.parent/"logs/dataset/scenario").as_posix() #Dataset will be stored here. 
+    host = "172.27.160.1" #IP addres of the machine where CARLA server is running. 
 
     #Fixed parameter
     track = "MAP_QUALIFIER"
-    agent = "/home/workspace/common_library/agent_lib/data_agent.py"
+    agent = f"{common_library_root}/agent_lib/data_agent.py" #Agent used for data collection. 
     debug = "0"
     resume = "1"
     timeout = "2000"
     port = "2000"
+    trafficmanagerport = "2003"
 #-----------------------------------------------------------------------------------
 
     env = os.environ.copy()
     env.update({
-                "CARLA_ROOT": "/home/workspace/carla_garage/carla",
-                "WORK_DIR": f"{working_directory}",
-                "SCENARIO_RUNNER_ROOT": "/home/workspace/carla_garage/scenario_runner_autopilot",
-                "LEADERBOARD_ROOT": "/home/workspace/carla_garage/leaderboard_autopilot",
+                "CARLA_ROOT": f"{carla_garage_root}/carla",
+                "WORK_DIR": f"{carla_garage_root}",
+                "SCENARIO_RUNNER_ROOT": f"{carla_garage_root}/scenario_runner_autopilot",
+                "LEADERBOARD_ROOT": f"{carla_garage_root}/leaderboard_autopilot",
                 "PYTHONPATH": os.environ.get("PYTHONPATH", "") +
-                    ":/home/workspace/carla_garage/carla/PythonAPI/carla" +
-                    ":/home/workspace/carla_garage/scenario_runner_autopilot" +
-                    ":/home/workspace/carla_garage/leaderboard_autopilot" +
-                    ":/home/workspace/carla_garage/team_code" +
-                    ":/home/workspace/common_library",
+                    f":{carla_garage_root}/carla/PythonAPI/carla" +
+                    f":{carla_garage_root}/scenario_runner_autopilot" +
+                    f":{carla_garage_root}/leaderboard_autopilot" +
+                    f":{carla_garage_root}/team_code" +
+                    f":{common_library_root}",
                 "REPETITION": f"{repetitions}",
                 "DEBUG_CHALLENGE": f"{debug}",
                 "PTH_ROUTE": "",
@@ -68,7 +70,7 @@ def main():
 
         num_route = 0
         for route in routes:
-            if repetitions_for_scenario is not None and repetitions_for_scenario < num_route:
+            if num_scenes is not None and num_scenes < num_route:
                 break
             else:
                 path_routes = route.removesuffix(".xml")
@@ -105,7 +107,7 @@ def main():
                     f"--traffic-manager-seed={trafficmanagerseed}"
                 ]
 
-                subprocess.run([sys.executable, script_path] + args, cwd=working_directory, env=env)
+                subprocess.run([sys.executable, script_path] + args, cwd=carla_garage_root, env=env)
                 time.sleep(60)
                 num_route += 1
 
