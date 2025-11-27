@@ -43,10 +43,6 @@ class DataAgent(AutoPilot):
         """
 
   def setup(self, path_to_conf_file, route_index=None, traffic_manager=None):
-    #-------configuration for data agent----------------------
-    self.conf_enable_disturbance = True #Add steering disturbance for agent
-    self.conf_plot_control = True #Plot control signals during runtime
-    #---------------------------------------------------------
     super().setup(path_to_conf_file, route_index, traffic_manager=None)
     #--------overwrite config----------------
     self.config = GlobalConfig()
@@ -54,6 +50,10 @@ class DataAgent(AutoPilot):
     self.vehicle_model = KinematicBicycleModel(self.config)
     self._turn_controller = LateralPIDController(self.config)
     #----------------------------------------
+    #-------configuration for data agent----------------------
+    self.conf_enable_disturbance = self.config.conf_enable_disturbance
+    self.conf_plot_control = self.config.conf_plot_control
+    #---------------------------------------------------------
     self.weather_tmp = None
     self.step_tmp = 0
 
