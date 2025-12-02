@@ -329,3 +329,24 @@ def get_bev_semantic_rgb(probs_bev, bev_classes_list):
     bev_rgb = np.tensordot(probs_bev_T.transpose(1,2,0), colors, axes=([2],[0]))
     bev_rgb = np.clip(bev_rgb, 0, 255).astype(np.uint8)
     return bev_rgb
+
+def cal_mfb_weights(
+    hist, 
+    ignore_class=None,
+    eps=1e-6,
+    max_weight=3.0,
+    min_class0_weight=0.5,
+    normalize=True):
+    mask = np.ones_like(hist, dtype=bool)
+    mask[ignore_class] = False
+    p = hist[mask] / (hist[mask].sum() + eps)
+    median_p = np.median(p[p > 0])
+    w_valid = median_p / (p + eps)
+    w_valid = np.clip(w_valid, a_min=None, a_max=max_weight)
+    if normalize:
+      w_valid = w_valid / w_valid.mean()
+    w = np.zeros_like(hist, dtype=np.float32)
+    w[mask] = w_valid
+    w[ignore_class] = 0.0
+    w[0] = max(w[0].item(), min_class0_weight)
+    return w.tolist()

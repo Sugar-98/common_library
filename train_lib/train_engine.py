@@ -197,7 +197,8 @@ class Engine:
       fig_loss, self.ax_loss = plt.subplots(1, 1)
     self.ax_loss.clear()
     self.ax_loss.plot(range(self.cur_epoch+1), self.train_loss, label = "train_loss")
-    self.ax_loss.plot(range(self.cur_epoch+1), self.val_loss, label = "val_loss")
+    if len(self.dataloader_val) != 0:
+      self.ax_loss.plot(range(self.cur_epoch+1), self.val_loss, label = "val_loss")
     self.ax_loss.set_xlabel("epoch")
     self.ax_loss.set_ylabel("loss")
     self.ax_loss.grid(True)

@@ -5,45 +5,68 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+import argparse
 
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Collect dataset"
+    )
+
+    parser.add_argument("--carla_garage_root", type=str, required=True,
+                        help="Path to carla_garage")
+    parser.add_argument("--script_path", type=str, required=True,
+                        help="Main script pth to run the simulation")
+    parser.add_argument("--common_library_root", type=str, required=True,
+                        help="Path to common_library")
+    parser.add_argument("--scenario_path", type=str, required=True,
+                        help="Path to scenario root folder")
+    parser.add_argument("--save_path", type=str, required=True,
+                        help="Path to save the dataset")
+    parser.add_argument("--agent", type=str, required=True,
+                        help="Path to agent file used for data collection")
+    parser.add_argument("--host", type=str, required=True,
+                        help="IP addres of the machine where CARLA server is running. ")
+    parser.add_argument("--port", type=str, required=True,
+                        help="port num used to connect carla server")
+    parser.add_argument("--trafficmanagerport", type=str, required=True,
+                        help="port num for trafficmanager")
+    parser.add_argument("--num_scenes", type=str, required=True,
+                        help="Number of scenes(xml files) executed for each scenario(e.g. AccidentTwoWays, BlockedIntersection, ...). ")
+    
+    return parser.parse_args()
 
 def main():
+    args = parse_args()
 #-----------------------------Configuration parameters------------------------------
-    root = Path(__file__).resolve().parent.parent.parent
-    carla_garage_root = (root/"carla_garage").as_posix()
-    script_path = f"{carla_garage_root}/leaderboard/leaderboard/leaderboard_evaluator_local.py"#main script to run the simulation
-    common_library_root = (root/"common_library").as_posix()
+    carla_garage_root = args.carla_garage_root
+    script_path = args.script_path
 
-    #Tunable parameter
-    num_scenes = None #Number of scenes(xml files) executed for each scenario(e.g. AccidentTwoWays, BlockedIntersection, ...). 
-    scenario_path =  f"{carla_garage_root}/data/*50x38_Town12*/*/"
+    if args.num_scenes != "None":
+        num_scenes = int(args.num_scenes)
+        print(f"Try to collect {num_scenes} scenes for each scenarios respectively")
+    else:
+        num_scenes = None #Number of scenes(xml files) executed for each scenario(e.g. AccidentTwoWays, BlockedIntersection, ...). "
+        print(f"Try to collect all scenes involved in each scenarios")
+    
+    scenario_path = args.scenario_path
     repetitions = "1" #Repetitions for each scenes
     trafficmanagerseed = "0"
-    save_path = (root.parent/"logs/dataset/scenario").as_posix() #Dataset will be stored here. 
-    host = "172.27.160.1" #IP addres of the machine where CARLA server is running. 
+    
+    save_path = args.save_path
+    host = args.host
 
     #Fixed parameter
     track = "MAP_QUALIFIER"
-    agent = f"{common_library_root}/agent_lib/data_agent.py" #Agent used for data collection. 
+    agent = args.agent
     debug = "0"
     resume = "1"
     timeout = "2000"
-    port = "2000"
-    trafficmanagerport = "2003"
+    port = args.port
+    trafficmanagerport = args.trafficmanagerport
 #-----------------------------------------------------------------------------------
 
     env = os.environ.copy()
     env.update({
-                "CARLA_ROOT": f"{carla_garage_root}/carla",
-                "WORK_DIR": f"{carla_garage_root}",
-                "SCENARIO_RUNNER_ROOT": f"{carla_garage_root}/scenario_runner_autopilot",
-                "LEADERBOARD_ROOT": f"{carla_garage_root}/leaderboard_autopilot",
-                "PYTHONPATH": os.environ.get("PYTHONPATH", "") +
-                    f":{carla_garage_root}/carla/PythonAPI/carla" +
-                    f":{carla_garage_root}/scenario_runner_autopilot" +
-                    f":{carla_garage_root}/leaderboard_autopilot" +
-                    f":{carla_garage_root}/team_code" +
-                    f":{common_library_root}",
                 "REPETITION": f"{repetitions}",
                 "DEBUG_CHALLENGE": f"{debug}",
                 "PTH_ROUTE": "",
@@ -88,8 +111,6 @@ def main():
                 if os.path.exists(checkpoint):
                     print(f"skip scenario : {checkpoint}")
                     continue
-                    #print(f"Delete file : {checkpoint}")
-                    #os.remove(checkpoint)
                 
                 args = [
                     f"--host={host}",
