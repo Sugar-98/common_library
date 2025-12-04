@@ -23,7 +23,7 @@ NUM_SCENES="None" #Number of scenes(xml files) executed for each scenario(e.g. A
 
 
 # ==== Run ====
-python "$MAIN_SCRIPT_PATH" \
+python3 "$MAIN_SCRIPT_PATH" \
     --carla_garage_root "$CARLA_GARAGE_ROOT" \
     --script_path "$SCRIPT_PATH" \
     --common_library_root "$COMMON_LIBRARY_ROOT" \
