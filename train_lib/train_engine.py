@@ -6,6 +6,7 @@ import os
 import matplotlib.pyplot as plt
 import numpy as np
 import csv
+from itertools import zip_longest
 
 class Engine:
   def __init__(self,
@@ -221,7 +222,7 @@ class Engine:
     with open(os.path.join(model_save_dir, 'loss_log.csv'), 'w', newline="") as f3:
         writer = csv.writer(f3)
         writer.writerow(["epoch", "train_loss", "val_loss"])
-        for e, tr, vl in zip(epochs, self.train_loss, self.val_loss):
+        for e, tr, vl in zip_longest(epochs, self.train_loss, self.val_loss):
             writer.writerow([e, tr, vl])
 
 class Model_wrapper:
