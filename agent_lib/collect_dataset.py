@@ -4,44 +4,69 @@ import re
 import subprocess
 import sys
 import time
+from pathlib import Path
+import argparse
 
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Collect dataset"
+    )
+
+    parser.add_argument("--carla_garage_root", type=str, required=True,
+                        help="Path to carla_garage")
+    parser.add_argument("--script_path", type=str, required=True,
+                        help="Main script pth to run the simulation")
+    parser.add_argument("--common_library_root", type=str, required=True,
+                        help="Path to common_library")
+    parser.add_argument("--scenario_path", type=str, required=True,
+                        help="Path to scenario root folder")
+    parser.add_argument("--save_path", type=str, required=True,
+                        help="Path to save the dataset")
+    parser.add_argument("--agent", type=str, required=True,
+                        help="Path to agent file used for data collection")
+    parser.add_argument("--host", type=str, required=True,
+                        help="IP addres of the machine where CARLA server is running. ")
+    parser.add_argument("--port", type=str, required=True,
+                        help="port num used to connect carla server")
+    parser.add_argument("--trafficmanagerport", type=str, required=True,
+                        help="port num for trafficmanager")
+    parser.add_argument("--num_scenes", type=str, required=True,
+                        help="Number of scenes(xml files) executed for each scenario(e.g. AccidentTwoWays, BlockedIntersection, ...). ")
+    
+    return parser.parse_args()
 
 def main():
+    args = parse_args()
 #-----------------------------Configuration parameters------------------------------
-    script_path = "/home/workspace/carla_garage/leaderboard/leaderboard/leaderboard_evaluator_local.py"#main script to run the simulation
-    working_directory = "/home/workspace/carla_garage"
+    carla_garage_root = args.carla_garage_root
+    script_path = args.script_path
 
-    #Tunable parameter
-    repetitions_for_scenario = None
-    data_root = "/home/workspace/carla_garage/data"
-    scenario_path = f"{data_root}/*lb1_split_copy*/*/"
-    repetitions = "1"
+    if args.num_scenes != "None":
+        num_scenes = int(args.num_scenes)
+        print(f"Try to collect {num_scenes} scenes for each scenarios respectively")
+    else:
+        num_scenes = None #Number of scenes(xml files) executed for each scenario(e.g. AccidentTwoWays, BlockedIntersection, ...). "
+        print(f"Try to collect all scenes involved in each scenarios")
+    
+    scenario_path = args.scenario_path
+    repetitions = "1" #Repetitions for each scenes
     trafficmanagerseed = "0"
-    save_path = "/home/workspace/logs/dataset_dist/scenario"
-    host = "172.27.160.1"
-    trafficmanagerport = "2003"
+    
+    save_path = args.save_path
+    host = args.host
 
     #Fixed parameter
     track = "MAP_QUALIFIER"
-    agent = "/home/workspace/common_library/agent_lib/data_agent.py"
+    agent = args.agent
     debug = "0"
     resume = "1"
     timeout = "2000"
-    port = "2000"
+    port = args.port
+    trafficmanagerport = args.trafficmanagerport
 #-----------------------------------------------------------------------------------
 
     env = os.environ.copy()
     env.update({
-                "CARLA_ROOT": "/home/workspace/carla_garage/carla",
-                "WORK_DIR": f"{working_directory}",
-                "SCENARIO_RUNNER_ROOT": "/home/workspace/carla_garage/scenario_runner_autopilot",
-                "LEADERBOARD_ROOT": "/home/workspace/carla_garage/leaderboard_autopilot",
-                "PYTHONPATH": os.environ.get("PYTHONPATH", "") +
-                    ":/home/workspace/carla_garage/carla/PythonAPI/carla" +
-                    ":/home/workspace/carla_garage/scenario_runner_autopilot" +
-                    ":/home/workspace/carla_garage/leaderboard_autopilot" +
-                    ":/home/workspace/carla_garage/team_code" +
-                    ":/home/workspace/common_library",
                 "REPETITION": f"{repetitions}",
                 "DEBUG_CHALLENGE": f"{debug}",
                 "PTH_ROUTE": "",
@@ -68,7 +93,7 @@ def main():
 
         num_route = 0
         for route in routes:
-            if repetitions_for_scenario is not None and repetitions_for_scenario < num_route:
+            if num_scenes is not None and num_scenes < num_route:
                 break
             else:
                 path_routes = route.removesuffix(".xml")
@@ -86,8 +111,6 @@ def main():
                 if os.path.exists(checkpoint):
                     print(f"skip scenario : {checkpoint}")
                     continue
-                    #print(f"Delete file : {checkpoint}")
-                    #os.remove(checkpoint)
                 
                 args = [
                     f"--host={host}",
@@ -105,7 +128,7 @@ def main():
                     f"--traffic-manager-seed={trafficmanagerseed}"
                 ]
 
-                subprocess.run([sys.executable, script_path] + args, cwd=working_directory, env=env)
+                subprocess.run([sys.executable, script_path] + args, cwd=carla_garage_root, env=env)
                 time.sleep(60)
                 num_route += 1
 

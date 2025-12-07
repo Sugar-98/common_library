@@ -343,7 +343,9 @@ class GlobalConfig:
     # LiDAR compression parameters
     self.point_format = 0  # LARS point format used for storing
     self.point_precision = 0.01  # Precision up to which LiDAR points are stored
-
+    
+    self.conf_enable_disturbance = False #Add steering disturbance for agent
+    self.conf_plot_control = False #Plot control signals during data collection
     # -----------------------------------------------------------------------------
     # Sensor config
     # -----------------------------------------------------------------------------

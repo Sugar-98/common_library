@@ -6,6 +6,7 @@ import os
 import matplotlib.pyplot as plt
 import numpy as np
 import csv
+from itertools import zip_longest
 
 class Engine:
   def __init__(self,
@@ -197,7 +198,8 @@ class Engine:
       fig_loss, self.ax_loss = plt.subplots(1, 1)
     self.ax_loss.clear()
     self.ax_loss.plot(range(self.cur_epoch+1), self.train_loss, label = "train_loss")
-    self.ax_loss.plot(range(self.cur_epoch+1), self.val_loss, label = "val_loss")
+    if len(self.dataloader_val) != 0:
+      self.ax_loss.plot(range(self.cur_epoch+1), self.val_loss, label = "val_loss")
     self.ax_loss.set_xlabel("epoch")
     self.ax_loss.set_ylabel("loss")
     self.ax_loss.grid(True)
@@ -220,7 +222,7 @@ class Engine:
     with open(os.path.join(model_save_dir, 'loss_log.csv'), 'w', newline="") as f3:
         writer = csv.writer(f3)
         writer.writerow(["epoch", "train_loss", "val_loss"])
-        for e, tr, vl in zip(epochs, self.train_loss, self.val_loss):
+        for e, tr, vl in zip_longest(epochs, self.train_loss, self.val_loss):
             writer.writerow([e, tr, vl])
 
 class Model_wrapper:
