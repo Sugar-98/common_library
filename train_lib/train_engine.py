@@ -6,6 +6,7 @@ import os
 import matplotlib.pyplot as plt
 import numpy as np
 import csv
+import math
 from itertools import zip_longest
 
 class Engine:
@@ -33,6 +34,7 @@ class Engine:
     torch.autograd.set_detect_anomaly(True) #detect invalid grad
     num_batches = 0
     loss_epoch = 0.0
+    self.model_wrapper.init_metrics()
 
     for i, data in enumerate(tqdm(self.dataloader_train)):
       self.optimizer.zero_grad()
@@ -48,18 +50,29 @@ class Engine:
       self.optimizer.step()
       num_batches += 1
       loss_epoch += float(loss.item())
+      self.model_wrapper.cal_metrics_batch()
 
+    metrics = self.model_wrapper.cal_metrics_epoch()
     print(f'-----------Loss_Train {loss_epoch/len(self.dataloader_train)}----------')
     self.model_wrapper.plot_model_out()
 
     if self.cur_epoch == 0:
       self.train_loss = []
       self.train_loss.append(loss_epoch/len(self.dataloader_train))
+
+      self.train_metrics = {}
+      for key, value in metrics.items():
+        self.train_metrics[key] = []
+        self.train_metrics[key].append(value)
     else:
       self.train_loss.append(loss_epoch/len(self.dataloader_train))
 
+      for key, value in metrics.items():
+        self.train_metrics[key].append(value)
+
   def validate(self):
     self.model_wrapper.eval()
+    self.model_wrapper.init_metrics()
 
     num_batches = 0
     loss_epoch = 0.0
@@ -69,15 +82,25 @@ class Engine:
           pred, label, loss, tmp_loss_individual = self.model_wrapper.load_data_compute_loss(data)
           num_batches += 1
           loss_epoch += float(loss.item())
+          self.model_wrapper.cal_metrics_batch()
 
+        metrics = self.model_wrapper.cal_metrics_epoch()
         print(f'-----------Loss_Validate {loss_epoch/len(self.dataloader_val)}----------')
         self.model_wrapper.plot_model_out()
 
       if self.cur_epoch == 0:
         self.val_loss = []
         self.val_loss.append(loss_epoch/len(self.dataloader_val))
+        
+        self.val_metrics = {}
+        for key, value in metrics.items():
+          self.val_metrics[key] = []
+          self.val_metrics[key].append(value)
       else:
         self.val_loss.append(loss_epoch/len(self.dataloader_val))
+
+        for key, value in metrics.items():
+          self.val_metrics[key].append(value)
 
   def plot_data(self):
     steer = torch.tensor([])
@@ -208,7 +231,38 @@ class Engine:
     plt.show(block=False)
     plt.pause(1)
 
+  def plot_metrics(self):
+    if not hasattr(self, 'ax_metrics'):
+      num_metrics = len(self.config.plot_metrics)
+      rows = min(4, num_metrics)
+      cols = math.ceil(num_metrics / rows)
+      fig_loss, self.ax_metrics = plt.subplots(rows, cols)
+      self.ax_metrics = np.array(self.ax_metrics).reshape(-1)
 
+    graph_idx = 0
+    for key in self.config.plot_metrics:
+      self.ax_metrics[graph_idx].clear()
+      metrics = self.train_metrics[key]
+      if isinstance(metrics[0], (list, tuple, np.ndarray)):
+        cmap = plt.get_cmap("tab10", len(metrics[0])).colors
+
+        if hasattr(self, "val_metrics"):
+          val_metrics = list(zip(*self.val_metrics[key]))
+        
+        for class_idx, metrics_class in enumerate(zip(*metrics)):
+          color = cmap[class_idx]
+          self.ax_metrics[graph_idx].plot(range(len(metrics)), metrics_class, color=color, linestyle='-', label = f"Class_{class_idx}_Train")
+          if hasattr(self, "val_metrics"):
+            self.ax_metrics[graph_idx].plot(range(len(metrics)), val_metrics[class_idx], color=color, linestyle='--', label = f"Class_{class_idx}_Val")
+      else:
+        self.ax_metrics[graph_idx].plot(range(len(metrics)), metrics, label = "Train")
+        if hasattr(self, "val_metrics"):
+          self.ax_metrics[graph_idx].plot(range(len(metrics)), self.val_metrics[key], label = "Val")
+      self.ax_metrics[graph_idx].set_xlabel("epoch")
+      self.ax_metrics[graph_idx].set_ylabel(key)
+      self.ax_metrics[graph_idx].grid(True)
+      self.ax_metrics[graph_idx].legend()
+      graph_idx += 1
 
   def save(self, model_save_dir):
     model_file = os.path.join(model_save_dir, f'model_{self.cur_epoch:04d}.pth')
@@ -253,3 +307,13 @@ class Model_wrapper:
   
   def plot_model_out():
     return
+
+  def init_metrics(self):
+    return
+
+  def cal_metrics_batch(self):
+    return
+
+  def cal_metrics_epoch(self):
+    metrics = {}
+    return metrics

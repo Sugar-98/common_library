@@ -350,3 +350,32 @@ def cal_mfb_weights(
     w[ignore_class] = 0.0
     w[0] = max(w[0].item(), min_class0_weight)
     return w.tolist()
+
+def compute_tp_fp_fn_multiclass(logits, label, num_classes, ignore_class=[]):
+    pred = logits.argmax(dim=1)   # (B, H, W)
+    pred = pred.view(-1)
+    label = label.view(-1)
+
+    ignore_mask = torch.zeros_like(label, dtype=torch.bool)
+    for cls in ignore_class:
+        ignore_mask |= (label == cls)
+
+    valid_mask = ~ignore_mask
+
+    pred = pred[valid_mask]
+    label = label[valid_mask]
+
+    tp = torch.zeros(num_classes, dtype=torch.long)
+    fp = torch.zeros(num_classes, dtype=torch.long)
+    fn = torch.zeros(num_classes, dtype=torch.long)
+
+    for c in range(num_classes):
+
+        if c in ignore_class:
+            continue
+
+        tp[c] = ((pred == c) & (label == c)).sum()
+        fp[c] = ((pred == c) & (label != c)).sum()
+        fn[c] = ((pred != c) & (label == c)).sum()
+
+    return  tp,fp,fn

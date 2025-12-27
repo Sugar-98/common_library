@@ -19,7 +19,7 @@ class Process_Images:
     loaded_images, loaded_images_augmented = self.load_data(index)
 
     loaded_images = loaded_images[self.config.seq_len - 1]
-    loaded_images_augmented = [self.config.seq_len - 1]
+    loaded_images_augmented = loaded_images_augmented [self.config.seq_len - 1]
 
     imgs = []
     rots = []
@@ -120,7 +120,7 @@ class Process_Images:
         cache_key_aug = str(images_augmented[i], encoding='utf-8')
 
         # Retrieve data from the disc cache
-        if not self.data_cache is None and cache_key in self.data_cache:
+        if not self.data_cache is None and cache_key_aug in self.data_cache:
           img_augmented = self.data_cache[cache_key_aug]
           img_augmented = cv2.imdecode(img_augmented, cv2.IMREAD_UNCHANGED)
         
