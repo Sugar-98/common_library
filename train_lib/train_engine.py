@@ -236,7 +236,12 @@ class Engine:
       num_metrics = len(self.config.plot_metrics)
       rows = min(4, num_metrics)
       cols = math.ceil(num_metrics / rows)
-      fig_loss, self.ax_metrics = plt.subplots(rows, cols)
+
+      base_w = 8
+      base_h = 2
+      figsize = (cols * base_w, rows * base_h)
+
+      _, self.ax_metrics = plt.subplots(rows, cols, figsize=figsize)
       self.ax_metrics = np.array(self.ax_metrics).reshape(-1)
 
     graph_idx = 0
@@ -264,20 +269,82 @@ class Engine:
       self.ax_metrics[graph_idx].legend()
       graph_idx += 1
 
-  def save(self, model_save_dir):
-    model_file = os.path.join(model_save_dir, f'model_{self.cur_epoch:04d}.pth')
+    plt.show(block=False)
+    plt.pause(1)
+
+  def save(self, model_save_dir, epoch = None):
+    if epoch is not None:
+      model_file = os.path.join(model_save_dir, f"model_{epoch:04d}.pth")
+    else:
+      model_file = os.path.join(model_save_dir, f'model_latest.pth')
     torch.save(self.model_wrapper.state_dict(), model_file)
 
     json_config = jsonpickle.encode(self.config)
     with open(os.path.join(model_save_dir, 'config.json'), 'w') as f2:
       f2.write(json_config)
 
-    epochs = range(len(self.train_loss))
-    with open(os.path.join(model_save_dir, 'loss_log.csv'), 'w', newline="") as f3:
-        writer = csv.writer(f3)
-        writer.writerow(["epoch", "train_loss", "val_loss"])
-        for e, tr, vl in zip_longest(epochs, self.train_loss, self.val_loss):
-            writer.writerow([e, tr, vl])
+    self.save_log(model_save_dir, epoch)
+
+  def save_log(self, model_save_dir, epoch = None):
+
+    has_val_loss = hasattr(self, 'val_loss') and len(self.val_loss) > 0
+    has_val_metrics = hasattr(self, 'val_metrics') and len(self.val_metrics) > 0
+    
+    def build_header():
+      row = ["epoch", "train_loss"]
+      if  has_val_loss:
+        row.append("val_loss")
+      for key, value in self.train_metrics.items():
+        if isinstance(value[0], (list, tuple, np.ndarray)):
+          for class_idx in range(len(value[0])):
+            row.append(f"{key}_{class_idx}_train")
+            if has_val_metrics:
+              row.append(f"{key}_{class_idx}_val")
+        else:
+          row.append(f"{key}_train")
+          if has_val_metrics:
+              row.append(f"{key}_val")
+      return row
+
+    def build_data(epoch):
+      data = [epoch, self.train_loss[epoch]]
+      if  has_val_loss:
+        data.append(self.val_loss[epoch])
+
+      for key, value in self.train_metrics.items():
+        if isinstance(value[0], (list, tuple, np.ndarray)):
+          for class_idx in range(len(value[0])):
+            data.append(value[epoch][class_idx])
+            if has_val_metrics:
+              data.append(self.val_metrics[key][epoch][class_idx])
+        else:
+          data.append(value[epoch])
+          if has_val_metrics:
+            data.append(self.val_metrics[key][epoch])
+      return data
+
+    log_path = os.path.join(model_save_dir, 'log.csv')
+    if epoch is None:
+      with open(log_path, 'w', newline="") as log:
+        writer = csv.writer(log)
+
+        row = build_header()
+        writer.writerow(row)
+
+        for epoch in range(len(self.train_loss)):
+          data = build_data(epoch)
+          writer.writerow(data)
+    else:
+      log_exists = os.path.exists(log_path)
+      with open(log_path, 'a', newline="") as log:
+        writer = csv.writer(log)
+
+        if not log_exists:
+          row = build_header()
+          writer.writerow(row)
+
+        data = build_data(epoch)
+        writer.writerow(data)
 
 class Model_wrapper:
   def __init__(self, model, config, device):

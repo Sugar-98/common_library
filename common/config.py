@@ -638,11 +638,7 @@ class GlobalConfig:
       'm_precision', 
       'm_recall', 
       'm_f1', 
-      'mIoU',
-      "precision", 
-      "recall", 
-      "f1", 
-      "iou", 
+      'mIoU'
     ]# Metrics which are plotted during each epochs
 
     # -----------------------------------------------------------------------------
@@ -944,8 +940,8 @@ class GlobalConfig:
     #----------------------------manual added-------------------------------------------------
     #----------------------------            -------------------------------------------------
     self.use_lider = False
-    self.num_max_data_train = 100000
-    self.num_max_data_val = 5000
+    self.num_max_data_train = 10000
+    self.num_max_data_val = 1000
     self.min_abs_speed = None #Reduce low speed data
     self.min_abs_speed_rate = 0.90 #Reduce rate
     self.reduce_straight_run_rate = [1/1.3, 1/1.5, 1/1.6, 1/6, 1/3] #rate for ignore low steer data
