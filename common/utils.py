@@ -172,11 +172,11 @@ def conv_NuScenes2Carla(trans_nu, rot_mat_nu):
   rot_carla = [roll, pitch, yaw]
   return trans_carla, rot_carla
 
-def post_augument(img, data_aug_conf, validation):
+def post_augument(img, data_aug_conf, augmentation):
   post_rot = np.eye(2, dtype=float)
   post_tran = np.zeros(2, dtype=float)
   # augmentation (resize, crop, horizontal flip, rotate)
-  resize, resize_dims, crop, flip, rotate = define_augmentation(data_aug_conf, validation)
+  resize, resize_dims, crop, flip, rotate = define_augmentation(data_aug_conf, augmentation)
   img_augumented, post_rot2, post_tran2 = img_transform(img, post_rot, post_tran,
          resize=resize,
          resize_dims=resize_dims,
@@ -193,11 +193,11 @@ def post_augument(img, data_aug_conf, validation):
 
   return img_augumented, post_rot, post_tran
 
-def define_augmentation(data_aug_conf, validation):
+def define_augmentation(data_aug_conf, augmentation):
   H, W = data_aug_conf['H'], data_aug_conf['W']
   fH, fW = data_aug_conf['final_dim']
 
-  if validation:
+  if not augmentation:
     resize = max(fH/H, fW/W)
     resize_dims = (int(W*resize), int(H*resize))
     newW, newH = resize_dims

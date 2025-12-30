@@ -28,20 +28,28 @@ class CARLA_Data(Dataset):  # pylint: disable=locally-disabled, invalid-name
 
   def __init__(self,
                root,
-               config,
-               estimate_class_distributions=False,
-               estimate_sem_distribution=False,
+               DataLoader_config,
+               carla_garage_config,
+               DataAgent_config,
                shared_dict=None,
                rank=0,
-               validation=False):
-    self.config = config
+               validation=False,
+               val_towns=[],
+               augment_percentage = 0,
+               augment = False):
+    self.DataLoader_config = DataLoader_config
+    self.carla_garage_config = carla_garage_config
+    self.DataAgent_config = DataAgent_config
+    self.val_towns = val_towns
+    estimate_class_distributions = DataLoader_config.estimate_class_distributions
+    estimate_sem_distribution = DataLoader_config.estimate_semantic_distribution
     self.validation = validation
-    assert config.img_seq_len == 1
+    assert DataLoader_config.img_seq_len == 1
 
     self.data_cache = shared_dict
-    self.target_speed_bins = np.array(config.target_speed_bins)
-    self.angle_bins = np.array(config.angle_bins)
-    self.converter = np.uint8(config.converter)
+    self.target_speed_bins = np.array(DataLoader_config.target_speed_bins)
+    self.angle_bins = np.array(DataLoader_config.angle_bins)
+    self.converter = np.uint8(carla_garage_config.converter)
 
     self.images = []
     self.images_augmented = []
@@ -62,9 +70,9 @@ class CARLA_Data(Dataset):  # pylint: disable=locally-disabled, invalid-name
     self.num_data = 0
 
     # Initialize with 1 example per class
-    self.angle_distribution = np.arange(len(config.angles)).tolist()
-    self.speed_distribution = np.arange(len(config.target_speeds)).tolist()
-    self.semantic_distribution = np.arange(len(config.semantic_weights)).tolist()
+    self.angle_distribution = np.arange(len(DataLoader_config.angles)).tolist()
+    self.speed_distribution = np.arange(len(DataLoader_config.target_speeds)).tolist()
+    self.semantic_distribution = np.arange(len(DataLoader_config.semantic_weights)).tolist()
     total_routes = 0
     trainable_routes = 0
     skipped_routes = 0
@@ -83,14 +91,14 @@ class CARLA_Data(Dataset):  # pylint: disable=locally-disabled, invalid-name
       for route in routes:  # loop over individual routes within this scenario folder
         
         repetition = int(re.search('_Rep(\\d+)', route).group(1))
-        if repetition >= self.config.num_repetitions:
+        if repetition >= self.DataLoader_config.num_repetitions:
           continue
 
         town = int(re.search('Town(\\d+)', route).group(1))
-        if self.config.val_towns:
-          if self.validation and (town not in self.config.val_towns):
+        if self.val_towns:
+          if self.validation and (town not in self.val_towns):
             continue
-          elif not self.validation and (town in self.config.val_towns):
+          elif not self.validation and (town in self.val_towns):
             continue
 
         route_dir = sub_root + '/' + route
@@ -103,7 +111,7 @@ class CARLA_Data(Dataset):  # pylint: disable=locally-disabled, invalid-name
         # We skip data where the expert did not achieve perfect driving score (except for min speed infractions)
         with gzip.open(route_dir + '/results.json.gz', 'rt', encoding='utf-8') as f:
           results_route = ujson.load(f)
-        if self.config.MaskScoreCheck_for_Dataset:
+        if self.DataLoader_config.MaskScoreCheck_for_Dataset:
           condition1 = False
         else:
           condition1 = (results_route['scores']['score_composed'] < 100.0 and \
@@ -130,16 +138,16 @@ class CARLA_Data(Dataset):  # pylint: disable=locally-disabled, invalid-name
 
         # If we are using checkpoints to predict the path, we can use all of the frames, otherwise we need to subtract
         # pred_len so that we have enough waypoint labels
-        last_frame = num_seq - (self.config.seq_len - 1) - (0 if not self.config.use_wp_gru else self.config.pred_len)
-        for seq in range(config.skip_first, last_frame):
+        last_frame = num_seq - (self.DataLoader_config.seq_len - 1) - (0 if not self.DataLoader_config.use_wp_gru else self.DataLoader_config.pred_len)
+        for seq in range(DataLoader_config.skip_first, last_frame):
           if self.validation:
-            if not self.config.num_max_data_val is None and self.config.num_max_data_val <= self.num_data:
+            if not self.DataLoader_config.num_max_data_val is None and self.DataLoader_config.num_max_data_val <= self.num_data:
                     break
           else:
-            if not self.config.num_max_data_train is None and self.config.num_max_data_train <= self.num_data:
+            if not self.DataLoader_config.num_max_data_train is None and self.DataLoader_config.num_max_data_train <= self.num_data:
                     break
           
-          if seq % config.train_sampling_rate != 0:
+          if seq % DataLoader_config.train_sampling_rate != 0:
             continue
 
           # load input seq and pred seq jointly
@@ -157,29 +165,26 @@ class CARLA_Data(Dataset):  # pylint: disable=locally-disabled, invalid-name
           measurement = []
 
           # Loads the current (and past) frames (if seq_len > 1)
-          for idx in range(self.config.seq_len):
-            
-            if not self.config.use_plant:
+          for idx in range(self.DataLoader_config.seq_len):
+            rgbs = []
+            for camera in self.DataAgent_config.cameras:
+              camera_dir = "/" + f"{camera.name:0>20}"
+              rgbs.append(route_dir + '/rgb' + camera_dir + (f'/{(seq + idx):04}.jpg'))
+            image.append(rgbs)
+            image_augmented.append(route_dir + '/rgb_augmented' + (f'/{(seq + idx):04}.jpg'))
+            semantic.append(route_dir + '/semantics' + (f'/{(seq + idx):04}.png'))
+            semantic_augmented.append(route_dir + '/semantics_augmented' + (f'/{(seq + idx):04}.png'))
+            bev_semantic.append(route_dir + '/bev_semantics' + (f'/{(seq + idx):04}.png'))
+            bev_semantic_augmented.append(route_dir + '/bev_semantics_augmented' + (f'/{(seq + idx):04}.png'))
+            depth.append(route_dir + '/depth' + (f'/{(seq + idx):04}.png'))
+            depth_augmented.append(route_dir + '/depth_augmented' + (f'/{(seq + idx):04}.png'))
+            lidar.append(route_dir + '/lidar' + (f'/{(seq + idx):04}.laz'))
 
-              rgbs = []
-              for camera in self.config.cameras:
-                camera_dir = "/" + f"{camera.name:0>20}"
-                rgbs.append(route_dir + '/rgb' + camera_dir + (f'/{(seq + idx):04}.jpg'))
-              image.append(rgbs)
-              image_augmented.append(route_dir + '/rgb_augmented' + (f'/{(seq + idx):04}.jpg'))
-              semantic.append(route_dir + '/semantics' + (f'/{(seq + idx):04}.png'))
-              semantic_augmented.append(route_dir + '/semantics_augmented' + (f'/{(seq + idx):04}.png'))
-              bev_semantic.append(route_dir + '/bev_semantics' + (f'/{(seq + idx):04}.png'))
-              bev_semantic_augmented.append(route_dir + '/bev_semantics_augmented' + (f'/{(seq + idx):04}.png'))
-              depth.append(route_dir + '/depth' + (f'/{(seq + idx):04}.png'))
-              depth_augmented.append(route_dir + '/depth_augmented' + (f'/{(seq + idx):04}.png'))
-              lidar.append(route_dir + '/lidar' + (f'/{(seq + idx):04}.laz'))
+            if estimate_sem_distribution:
+              semantics_i = self.converter[cv2.imread(semantic[-1], cv2.IMREAD_UNCHANGED)]  # pylint: disable=locally-disabled, unsubscriptable-object
+              self.semantic_distribution.extend(semantics_i.flatten().tolist())
 
-              if estimate_sem_distribution:
-                semantics_i = self.converter[cv2.imread(semantic[-1], cv2.IMREAD_UNCHANGED)]  # pylint: disable=locally-disabled, unsubscriptable-object
-                self.semantic_distribution.extend(semantics_i.flatten().tolist())
-
-            forcast_step = int(config.forcast_time / (config.data_save_freq / config.carla_fps) + 0.5)
+            forcast_step = int(DataLoader_config.forcast_time / (DataAgent_config.data_save_freq / DataLoader_config.carla_fps) + 0.5)
 
             box.append(route_dir + '/boxes' + (f'/{(seq + idx):04}.json.gz'))
             future_box.append(route_dir + '/boxes' + (f'/{(seq + idx + forcast_step):04}.json.gz'))
@@ -191,34 +196,34 @@ class CARLA_Data(Dataset):  # pylint: disable=locally-disabled, invalid-name
           with gzip.open(measurement[-1] + f'/{(seq):04}.json.gz', 'rt', encoding='utf-8') as f:
               measurements_i = ujson.load(f)
 
-          if self.config.min_abs_speed is not None:
+          if self.DataLoader_config.min_abs_speed is not None:
             speed = measurements_i['speed']
-            if (-1*self.config.min_abs_speed < speed) & (speed < self.config.min_abs_speed):
-              if random.random() <= self.config.min_abs_speed_rate:
+            if (-1*self.DataLoader_config.min_abs_speed < speed) & (speed < self.DataLoader_config.min_abs_speed):
+              if random.random() <= self.DataLoader_config.min_abs_speed_rate:
                 continue
             
-          if (self.config.low_steer_threshold is not None) & (self.config.reduce_straight_run_rate is not None):
+          if (self.DataLoader_config.low_steer_threshold is not None) & (self.DataLoader_config.reduce_straight_run_rate is not None):
             steer = measurements_i['steer']
-            if (-1*self.config.low_steer_threshold[3] < steer) & (steer < self.config.low_steer_threshold[4]):
-              if (-1*self.config.low_steer_threshold[3] < steer) & (steer < self.config.low_steer_threshold[3]):
-                if (-1*self.config.low_steer_threshold[2] < steer) & (steer < self.config.low_steer_threshold[2]):
-                  if (-1*self.config.low_steer_threshold[1] < steer) & (steer < self.config.low_steer_threshold[1]):
-                    if (-1*self.config.low_steer_threshold[0] < steer) & (steer < self.config.low_steer_threshold[0]):
-                      if random.random() <= self.config.reduce_straight_run_rate[0]:
+            if (-1*self.DataLoader_config.low_steer_threshold[3] < steer) & (steer < self.DataLoader_config.low_steer_threshold[4]):
+              if (-1*self.DataLoader_config.low_steer_threshold[3] < steer) & (steer < self.DataLoader_config.low_steer_threshold[3]):
+                if (-1*self.DataLoader_config.low_steer_threshold[2] < steer) & (steer < self.DataLoader_config.low_steer_threshold[2]):
+                  if (-1*self.DataLoader_config.low_steer_threshold[1] < steer) & (steer < self.DataLoader_config.low_steer_threshold[1]):
+                    if (-1*self.DataLoader_config.low_steer_threshold[0] < steer) & (steer < self.DataLoader_config.low_steer_threshold[0]):
+                      if random.random() <= self.DataLoader_config.reduce_straight_run_rate[0]:
                         continue
                     else:
-                      if random.random() <= self.config.reduce_straight_run_rate[1]:
+                      if random.random() <= self.DataLoader_config.reduce_straight_run_rate[1]:
                         continue
                   else:
-                    if random.random() <= self.config.reduce_straight_run_rate[2]:
+                    if random.random() <= self.DataLoader_config.reduce_straight_run_rate[2]:
                       continue
                 else:
-                  if random.random() <= self.config.reduce_straight_run_rate[3]:
+                  if random.random() <= self.DataLoader_config.reduce_straight_run_rate[3]:
                     continue
-              if random.random() <= self.config.reduce_straight_run_rate[4]:
+              if random.random() <= self.DataLoader_config.reduce_straight_run_rate[4]:
                 continue
 
-          if measurements_i['command'] in self.config.ignore_command:
+          if measurements_i['command'] in self.DataLoader_config.ignore_command:
             continue
           # else:
           #   print(f"{route} : {seq}")
@@ -233,15 +238,14 @@ class CARLA_Data(Dataset):  # pylint: disable=locally-disabled, invalid-name
 
             self.angle_distribution.append(angle_index)
             self.speed_distribution.append(target_speed_index)
-          if self.config.lidar_seq_len > 1:
+          if self.DataLoader_config.lidar_seq_len > 1:
             # load input seq and pred seq jointly
             temporal_lidar = []
             temporal_measurement = []
-            for idx in range(self.config.lidar_seq_len):
-              if not self.config.use_plant:
-                assert self.config.seq_len == 1  # Temporal LiDARs are only supported with seq len 1 right now
-                temporal_lidar.append(route_dir + '/lidar' + (f'/{(seq - idx):04}.laz'))
-                temporal_measurement.append(route_dir + '/measurements' + (f'/{(seq - idx):04}.json.gz'))
+            for idx in range(self.DataLoader_config.lidar_seq_len):
+              assert self.DataLoader_config.seq_len == 1  # Temporal LiDARs are only supported with seq len 1 right now
+              temporal_lidar.append(route_dir + '/lidar' + (f'/{(seq - idx):04}.laz'))
+              temporal_measurement.append(route_dir + '/measurements' + (f'/{(seq - idx):04}.json.gz'))
 
             self.temporal_lidars.append(temporal_lidar)
             self.temporal_measurements.append(temporal_measurement)
@@ -267,11 +271,11 @@ class CARLA_Data(Dataset):  # pylint: disable=locally-disabled, invalid-name
                                                   classes=classes_target_speeds,
                                                   y=self.speed_distribution)
 
-      config.target_speed_weights = target_speed_weights.tolist()
-      print('config.target_speeds: ', config.target_speeds)
-      print('config.target_speed_bins: ', config.target_speed_bins)
+      DataLoader_config.target_speed_weights = target_speed_weights.tolist()
+      print('DataLoader_config.target_speeds: ', DataLoader_config.target_speeds)
+      print('DataLoader_config.target_speed_bins: ', DataLoader_config.target_speed_bins)
       print('classes_target_speeds: ', classes_target_speeds)
-      print('Target speed weights: ', config.target_speed_weights)
+      print('Target speed weights: ', DataLoader_config.target_speed_weights)
       unique, counts = np.unique(self.speed_distribution, return_counts=True)
       ts_dict = dict(zip(unique, counts))
       print('Target speed counts: ', ts_dict)
@@ -282,7 +286,7 @@ class CARLA_Data(Dataset):  # pylint: disable=locally-disabled, invalid-name
       classes_angles = np.unique(self.angle_distribution)
       angle_weights = compute_class_weight(class_weight='balanced', classes=classes_angles, y=self.angle_distribution)
 
-      config.angle_weights = angle_weights.tolist()
+      DataLoader_config.angle_weights = angle_weights.tolist()
       sys.exit()
 
     if estimate_sem_distribution:
@@ -326,8 +330,18 @@ class CARLA_Data(Dataset):  # pylint: disable=locally-disabled, invalid-name
       print('Skipped routes:', skipped_routes)
       print('Trainable routes:', trainable_routes)
 
-    self.process_images = Process_Images(self.config, self.data_cache, self.images, self.images_augmented, self.validation)
-    self.process_bev = Process_Bev(self.config, self.data_cache, self.bev_semantics, self.bev_semantics_augmented, self.validation)
+    bev_config = {
+      "bev_converter":self.carla_garage_config.bev_converter, 
+      "pixels_per_meter":DataLoader_config.pixels_per_meter,
+      "pixels_per_meter_collection":DataAgent_config.pixels_per_meter_collection, 
+      "lidar_resolution_width":DataAgent_config.lidar_resolution_width, 
+      "lidar_resolution_height":DataAgent_config.lidar_resolution_height, 
+      "max_x":DataLoader_config.max_x, 
+      "min_x":DataLoader_config.min_x,
+    }
+
+    self.process_images = Process_Images(self.DataLoader_config, self.data_cache, self.images, self.images_augmented, cameras = self.DataAgent_config.cameras, validation=self.validation)
+    self.process_bev = Process_Bev(self.DataLoader_config, self.data_cache, self.bev_semantics, self.bev_semantics_augmented, bev_config = bev_config, validation=self.validation)
 
   def __len__(self):
     """Returns the length of the dataset. """
@@ -341,15 +355,14 @@ class CARLA_Data(Dataset):  # pylint: disable=locally-disabled, invalid-name
     data = {}
 
     # Determine whether the augmented camera or the normal camera is used.
-    if random.random() <= self.config.augment_percentage and self.config.augment:
+    if random.random() <= self.DataLoader_config.augment_percentage and self.DataLoader_config.augment:
       use_augment_sample = True
     else:
       use_augment_sample = False
 
-    if not self.config.use_plant:
-      if self.config.use_bev_semantic:
-        data_bev, bev_postaug_rot = self.process_bev.process_data(index, use_augment_sample)
-      data_images = self.process_images.process_data(index, use_augment_sample, bev_postaug_rot)
+    if self.DataLoader_config.use_bev_semantic:
+      data_bev, bev_postaug_rot = self.process_bev.process_data(index, use_augment_sample)
+    data_images = self.process_images.process_data(index, use_augment_sample, bev_postaug_rot)
 
     data = data_images | data_bev
 
