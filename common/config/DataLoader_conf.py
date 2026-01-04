@@ -53,13 +53,11 @@ class DataLoader_conf:
     # Whether to estimate the class weights or use the default from the config.
     self.estimate_class_distributions = False
     self.estimate_semantic_distribution = False
+    self.num_semantic_class = 7
     # Class weights applied to the cross entropy losses
     self.angle_weights = [
         204.25901201602136, 7.554315623148331, 0.21388916461734406, 5.476446162657503, 207.86684782608697
     ]
-    # We don't use weighting here
-    self.semantic_weights = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
-    self.bev_semantic_weights = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
 
     # v4 target speeds (0.72*speed limits) plus extra classes for obstacle scenarios and intersections
     self.target_speeds = [0.0, 4.0, 8.0, 10, 13.88888888, 16, 17.77777777, 20]
@@ -92,8 +90,8 @@ class DataLoader_conf:
       'Ncams': ncams,
     }
     self.MaskScoreCheck_for_Dataset = True
-    self.num_max_data_train = 1000
-    self.num_max_data_val = 100
+    self.num_max_data_train = 100000
+    self.num_max_data_val = 5000
     self.train_sampling_rate = 1  # We train on every n th sample on the route
     self.forcast_time = 0.5  # Number of seconds we forcast into the future
     self.carla_fps = 20  # Simulator Frames per second

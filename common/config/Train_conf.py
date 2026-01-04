@@ -1,3 +1,4 @@
+from config import GlobalConfig
 from common.config.DataLoader_conf import DataLoader_conf
 from common.config.DataAgent_conf import DataAgent_conf
 import os
@@ -98,9 +99,16 @@ class Train_conf:
     ]# Metrics which are plotted during each epochs
     self.val_towns = [13]
 
-  def initialize(self, root_dir='', setting='all', **kwargs):
-    self.DataAgent_config = DataAgent_conf()
-    self.DataLoader_config = DataLoader_conf(self.DataAgent_config)
+  def initialize(self, 
+                 root_dir, 
+                 carla_garage_config,
+                 DataAgent_config, 
+                 DataLoader_config,
+                 setting='all', 
+                 **kwargs):
+    self.carla_garage_config = carla_garage_config
+    self.DataAgent_config = DataAgent_config
+    self.DataLoader_config = DataLoader_config
 
     for k, v in kwargs.items():
       setattr(self, k, v)

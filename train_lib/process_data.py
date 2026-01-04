@@ -41,10 +41,10 @@ class Process_Images:
       if self.config.use_color_aug and not self.validation:
         img = self.image_augmenter_func(image=img)
 
-      if self.config.use_post_augment:
-        img, post_rot, post_tran = post_augument(img, self.config.data_aug_conf, self.validation)
-      else:
+      if self.config.use_post_augment and not self.validation:
         img, post_rot, post_tran = post_augument(img, self.config.data_aug_conf, augmentation=True)
+      else:
+        img, post_rot, post_tran = post_augument(img, self.config.data_aug_conf, augmentation=False)
 
       img = nomalize_image(img, self.config.rgb_mean, self.config.rgb_std)
 

@@ -15,7 +15,7 @@ class Engine:
          optimizer,
          dataloader_train,
          dataloader_val,
-         config,
+         Train_config,
          device,
          cur_epoch=0):
     self.cur_epoch = cur_epoch
@@ -25,7 +25,7 @@ class Engine:
     self.optimizer = optimizer
     self.dataloader_train = dataloader_train
     self.dataloader_val = dataloader_val
-    self.config = config
+    self.Train_config = Train_config
     self.device = device
     self.step = 0
   
@@ -41,10 +41,10 @@ class Engine:
       pred, label, loss, tmp_loss_individual = self.model_wrapper.load_data_compute_loss(data)
       loss.backward()
 
-      if self.config.use_grad_clip:
+      if self.Train_config.use_grad_clip:
         # Since the gradients of optimizers assigned params are now unscaled, we can clip as usual.
         torch.nn.utils.clip_grad_norm_(self.model_wrapper.parameters(),
-                      max_norm=int(self.config.grad_clip_max_norm),
+                      max_norm=int(self.Train_config.grad_clip_max_norm),
                       error_if_nonfinite=True)
         
       self.optimizer.step()
@@ -233,7 +233,7 @@ class Engine:
 
   def plot_metrics(self):
     if not hasattr(self, 'ax_metrics'):
-      num_metrics = len(self.config.plot_metrics)
+      num_metrics = len(self.Train_config.plot_metrics)
       rows = min(4, num_metrics)
       cols = math.ceil(num_metrics / rows)
 
@@ -245,7 +245,7 @@ class Engine:
       self.ax_metrics = np.array(self.ax_metrics).reshape(-1)
 
     graph_idx = 0
-    for key in self.config.plot_metrics:
+    for key in self.Train_config.plot_metrics:
       self.ax_metrics[graph_idx].clear()
       metrics = self.train_metrics[key]
       if isinstance(metrics[0], (list, tuple, np.ndarray)):
@@ -272,16 +272,17 @@ class Engine:
     plt.show(block=False)
     plt.pause(1)
 
-  def save(self, model_save_dir, epoch = None):
+  def save(self, model_save_dir, config_set, epoch = None):
     if epoch is not None:
       model_file = os.path.join(model_save_dir, f"model_{epoch:04d}.pth")
     else:
       model_file = os.path.join(model_save_dir, f'model_latest.pth')
     torch.save(self.model_wrapper.state_dict(), model_file)
 
-    json_config = jsonpickle.encode(self.config)
-    with open(os.path.join(model_save_dir, 'config.json'), 'w') as f2:
-      f2.write(json_config)
+    for conf_name, config in config_set.items():
+      json_config = jsonpickle.encode(config)
+      with open(os.path.join(model_save_dir, f'{conf_name}.json'), 'w') as f2:
+        f2.write(json_config)
 
     self.save_log(model_save_dir, epoch)
 

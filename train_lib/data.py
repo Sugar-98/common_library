@@ -72,7 +72,7 @@ class CARLA_Data(Dataset):  # pylint: disable=locally-disabled, invalid-name
     # Initialize with 1 example per class
     self.angle_distribution = np.arange(len(DataLoader_config.angles)).tolist()
     self.speed_distribution = np.arange(len(DataLoader_config.target_speeds)).tolist()
-    self.semantic_distribution = np.arange(len(DataLoader_config.semantic_weights)).tolist()
+    self.semantic_distribution = np.arange(DataLoader_config.num_semantic_class).tolist()
     total_routes = 0
     trainable_routes = 0
     skipped_routes = 0
