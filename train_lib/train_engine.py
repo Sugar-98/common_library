@@ -31,7 +31,7 @@ class Engine:
   
   def train(self):
     self.model_wrapper.train()
-    torch.autograd.set_detect_anomaly(True) #detect invalid grad
+    torch.autograd.set_detect_anomaly(False) #detect invalid grad
     num_batches = 0
     loss_epoch = 0.0
     self.model_wrapper.init_metrics()
@@ -373,7 +373,7 @@ class Model_wrapper:
   def state_dict(self):
     return self.model.state_dict()
   
-  def plot_model_out():
+  def plot_model_out(self):
     return
 
   def init_metrics(self):

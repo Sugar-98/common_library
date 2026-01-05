@@ -140,13 +140,6 @@ class CARLA_Data(Dataset):  # pylint: disable=locally-disabled, invalid-name
         # pred_len so that we have enough waypoint labels
         last_frame = num_seq - (self.DataLoader_config.seq_len - 1) - (0 if not self.DataLoader_config.use_wp_gru else self.DataLoader_config.pred_len)
         for seq in range(DataLoader_config.skip_first, last_frame):
-          if self.validation:
-            if not self.DataLoader_config.num_max_data_val is None and self.DataLoader_config.num_max_data_val <= self.num_data:
-                    break
-          else:
-            if not self.DataLoader_config.num_max_data_train is None and self.DataLoader_config.num_max_data_train <= self.num_data:
-                    break
-          
           if seq % DataLoader_config.train_sampling_rate != 0:
             continue
 
@@ -300,6 +293,34 @@ class CARLA_Data(Dataset):  # pylint: disable=locally-disabled, invalid-name
     del self.angle_distribution
     del self.speed_distribution
     del self.semantic_distribution
+
+    def get_indices(num_max_data, seed=0):
+      if not num_max_data is None and num_max_data < self.num_data:
+        rng = random.Random(seed)
+        indices = rng.sample(range(self.num_data), num_max_data)
+        self.images = [self.images[idx] for idx in indices]
+        self.images_augmented = [self.images_augmented[idx] for idx in indices]
+        self.semantics = [self.semantics[idx] for idx in indices]
+        self.semantics_augmented = [self.semantics_augmented[idx] for idx in indices]
+        self.bev_semantics = [self.bev_semantics[idx] for idx in indices]
+        self.bev_semantics_augmented = [self.bev_semantics_augmented[idx] for idx in indices]
+        self.depth = [self.depth[idx] for idx in indices]
+        self.depth_augmented = [self.depth_augmented[idx] for idx in indices]
+        self.lidars = [self.lidars[idx] for idx in indices]
+        self.boxes = [self.boxes[idx] for idx in indices]
+        self.future_boxes = [self.future_boxes[idx] for idx in indices]
+        self.measurements = [self.measurements[idx] for idx in indices]
+        if self.DataLoader_config.lidar_seq_len > 1:
+          self.temporal_lidars = [self.temporal_lidars[idx] for idx in indices]
+          self.temporal_measurements = [self.temporal_measurements[idx] for idx in indices]
+        self.sample_start = [self.sample_start[idx] for idx in indices]
+
+        self.num_data = num_max_data
+
+    if self.validation:
+      get_indices(self.DataLoader_config.num_max_data_val)
+    else:
+      get_indices(self.DataLoader_config.num_max_data_train)
 
     # There is a complex "memory leak"/performance issue when using Python
     # objects like lists in a Dataloader that is loaded with
