@@ -8,6 +8,7 @@ import numpy as np
 import csv
 import math
 from itertools import zip_longest
+import time
 
 class Engine:
   def __init__(self,
@@ -28,8 +29,11 @@ class Engine:
     self.Train_config = Train_config
     self.device = device
     self.step = 0
+    self.exec_time_train = []
+    self.exec_time_val = []
   
   def train(self):
+    tic = time.perf_counter()
     self.model_wrapper.train()
     torch.autograd.set_detect_anomaly(False) #detect invalid grad
     num_batches = 0
@@ -70,13 +74,17 @@ class Engine:
       for key, value in metrics.items():
         self.train_metrics[key].append(value)
 
-  def validate(self):
-    self.model_wrapper.eval()
-    self.model_wrapper.init_metrics()
+    toc = time.perf_counter() - tic
+    self.exec_time_train.append(toc/3600)
 
-    num_batches = 0
-    loss_epoch = 0.0
+  def validate(self):
     if len(self.dataloader_val) != 0:
+      tic = time.perf_counter()
+      self.model_wrapper.eval()
+      self.model_wrapper.init_metrics()
+
+      num_batches = 0
+      loss_epoch = 0.0
       with torch.no_grad():
         for data in tqdm(self.dataloader_val):
           pred, label, loss, tmp_loss_individual = self.model_wrapper.load_data_compute_loss(data)
@@ -101,6 +109,9 @@ class Engine:
 
         for key, value in metrics.items():
           self.val_metrics[key].append(value)
+
+      toc = time.perf_counter() - tic
+      self.exec_time_val.append(toc/3600)
 
   def plot_data(self):
     steer = torch.tensor([])
@@ -280,7 +291,7 @@ class Engine:
     torch.save(self.model_wrapper.state_dict(), model_file)
 
     for conf_name, config in config_set.items():
-      json_config = jsonpickle.encode(config)
+      json_config = jsonpickle.encode(config, indent=2)
       with open(os.path.join(model_save_dir, f'{conf_name}.json'), 'w') as f2:
         f2.write(json_config)
 
@@ -292,9 +303,12 @@ class Engine:
     has_val_metrics = hasattr(self, 'val_metrics') and len(self.val_metrics) > 0
     
     def build_header():
-      row = ["epoch", "train_loss"]
+      row = ["epoch", "loss_train"]
       if  has_val_loss:
-        row.append("val_loss")
+        row.append("loss_val")
+      row.append("time_train(h)")
+      if  has_val_loss:
+        row.append("time_val(h)")
       for key, value in self.train_metrics.items():
         if isinstance(value[0], (list, tuple, np.ndarray)):
           for class_idx in range(len(value[0])):
@@ -311,6 +325,10 @@ class Engine:
       data = [epoch, self.train_loss[epoch]]
       if  has_val_loss:
         data.append(self.val_loss[epoch])
+
+      data.append(self.exec_time_train[epoch])
+      if  has_val_loss:
+        data.append(self.exec_time_val[epoch])
 
       for key, value in self.train_metrics.items():
         if isinstance(value[0], (list, tuple, np.ndarray)):
