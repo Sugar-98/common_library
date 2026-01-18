@@ -9,6 +9,7 @@ import csv
 import math
 from itertools import zip_longest
 import time
+import copy
 
 class Engine:
   def __init__(self,
@@ -31,6 +32,8 @@ class Engine:
     self.step = 0
     self.exec_time_train = []
     self.exec_time_val = []
+    self.metrics_best = {}
+    self.epoch_best = 0
   
   def train(self):
     tic = time.perf_counter()
@@ -112,6 +115,38 @@ class Engine:
 
       toc = time.perf_counter() - tic
       self.exec_time_val.append(toc/3600)
+
+  def early_stopping(self, epoch):
+    if not hasattr(self, "unupdate_cnt"):
+            self.unupdate_cnt = 0
+
+    if len(self.dataloader_val) != 0:
+
+      val_metrics_latest = {}
+      for key, value in self.val_metrics.items():
+          val_metrics_latest[key] = value[-1]
+
+      if not self.metrics_best:
+        self.metrics_best = copy.deepcopy(val_metrics_latest)
+        self.epoch_best = epoch
+        self.unupdate_cnt = 0
+        
+      elif self.model_wrapper.compare_metrics(self.metrics_best, val_metrics_latest):
+        self.unupdate_cnt = 0
+        self.metrics_best = copy.deepcopy(val_metrics_latest)
+        self.epoch_best = epoch
+
+      else:
+        self.unupdate_cnt += 1
+
+      if self.unupdate_cnt >= self.Train_config.early_stopping_th:
+        return True
+      else:
+        return False
+
+    else:
+      return False
+
 
   def plot_data(self):
     steer = torch.tensor([])
@@ -403,3 +438,10 @@ class Model_wrapper:
   def cal_metrics_epoch(self):
     metrics = {}
     return metrics
+
+  def compare_metrics(self, metrics_left, metrics_right):
+    """
+    Return True if metrics_right is better than metrics_left.
+    Input metrics should be same structure as return value of self.cal_metrics_epoch(). 
+    """
+    return True

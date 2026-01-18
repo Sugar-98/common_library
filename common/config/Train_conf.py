@@ -14,6 +14,7 @@ class Train_conf:
     self.lr = 3e-4  # Learning rate used for training
     self.batch_size = 16  # Batch size used during training
     self.logdir = ''  # Directory to log data to.
+    self.early_stopping_th = 3 #Stop training when metrics is not updated during this threshhold
     self.load_file = None  # File to continue training from
     self.setting = 'all'  # Setting used for training
     self.root_dir = ''  # Dataset root dir
