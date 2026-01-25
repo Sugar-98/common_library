@@ -1,6 +1,7 @@
 import numpy as np
 import torch
 import cv2
+import os
 
 class Camera:
   def __init__(self, trans, W, H,name, rot_quaternion = None, rot_euler = None,intrins = None, fov = None):
@@ -379,3 +380,31 @@ def compute_tp_fp_fn_multiclass(logits, label, num_classes, ignore_class=[]):
         fn[c] = ((pred != c) & (label == c)).sum()
 
     return  tp,fp,fn
+
+class MP4Writer:
+  def __init__(self, save_path, fps=10):
+    self.save_path = save_path
+    self.fps = fps
+    self.writer = None
+
+    os.makedirs(os.path.dirname(save_path), exist_ok=True)
+
+  def write(self, img_rgb):
+    """
+    img_rgb: np.ndarray (H, W, 3), uint8, RGB
+    """
+    h, w, _ = img_rgb.shape
+
+    if self.writer is None:
+      fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+      self.writer = cv2.VideoWriter(
+        self.save_path, fourcc, self.fps, (w, h)
+      )
+
+    img_bgr = img_rgb[..., ::-1]  # RGB -> BGR
+    self.writer.write(img_bgr)
+
+  def close(self):
+    if self.writer is not None:
+      self.writer.release()
+      self.writer = None
