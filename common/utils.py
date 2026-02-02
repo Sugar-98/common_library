@@ -1,6 +1,7 @@
 import numpy as np
 import torch
 import cv2
+import os
 
 class Camera:
   def __init__(self, trans, W, H,name, rot_quaternion = None, rot_euler = None,intrins = None, fov = None):
@@ -172,11 +173,11 @@ def conv_NuScenes2Carla(trans_nu, rot_mat_nu):
   rot_carla = [roll, pitch, yaw]
   return trans_carla, rot_carla
 
-def post_augument(img, data_aug_conf, validation):
+def post_augument(img, data_aug_conf, augmentation):
   post_rot = np.eye(2, dtype=float)
   post_tran = np.zeros(2, dtype=float)
   # augmentation (resize, crop, horizontal flip, rotate)
-  resize, resize_dims, crop, flip, rotate = define_augmentation(data_aug_conf, validation)
+  resize, resize_dims, crop, flip, rotate = define_augmentation(data_aug_conf, augmentation)
   img_augumented, post_rot2, post_tran2 = img_transform(img, post_rot, post_tran,
          resize=resize,
          resize_dims=resize_dims,
@@ -193,11 +194,11 @@ def post_augument(img, data_aug_conf, validation):
 
   return img_augumented, post_rot, post_tran
 
-def define_augmentation(data_aug_conf, validation):
+def define_augmentation(data_aug_conf, augmentation):
   H, W = data_aug_conf['H'], data_aug_conf['W']
   fH, fW = data_aug_conf['final_dim']
 
-  if validation:
+  if not augmentation:
     resize = max(fH/H, fW/W)
     resize_dims = (int(W*resize), int(H*resize))
     newW, newH = resize_dims
@@ -350,3 +351,60 @@ def cal_mfb_weights(
     w[ignore_class] = 0.0
     w[0] = max(w[0].item(), min_class0_weight)
     return w.tolist()
+
+def compute_tp_fp_fn_multiclass(logits, label, num_classes, ignore_class=[]):
+    pred = logits.argmax(dim=1)   # (B, H, W)
+    pred = pred.view(-1)
+    label = label.view(-1)
+
+    ignore_mask = torch.zeros_like(label, dtype=torch.bool)
+    for cls in ignore_class:
+        ignore_mask |= (label == cls)
+
+    valid_mask = ~ignore_mask
+
+    pred = pred[valid_mask]
+    label = label[valid_mask]
+
+    tp = torch.zeros(num_classes, dtype=torch.long)
+    fp = torch.zeros(num_classes, dtype=torch.long)
+    fn = torch.zeros(num_classes, dtype=torch.long)
+
+    for c in range(num_classes):
+
+        if c in ignore_class:
+            continue
+
+        tp[c] = ((pred == c) & (label == c)).sum()
+        fp[c] = ((pred == c) & (label != c)).sum()
+        fn[c] = ((pred != c) & (label == c)).sum()
+
+    return  tp,fp,fn
+
+class MP4Writer:
+  def __init__(self, save_path, fps=10):
+    self.save_path = save_path
+    self.fps = fps
+    self.writer = None
+
+    os.makedirs(os.path.dirname(save_path), exist_ok=True)
+
+  def write(self, img_rgb):
+    """
+    img_rgb: np.ndarray (H, W, 3), uint8, RGB
+    """
+    h, w, _ = img_rgb.shape
+
+    if self.writer is None:
+      fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+      self.writer = cv2.VideoWriter(
+        self.save_path, fourcc, self.fps, (w, h)
+      )
+
+    img_bgr = img_rgb[..., ::-1]  # RGB -> BGR
+    self.writer.write(img_bgr)
+
+  def close(self):
+    if self.writer is not None:
+      self.writer.release()
+      self.writer = None

@@ -6,7 +6,10 @@ import os
 import matplotlib.pyplot as plt
 import numpy as np
 import csv
+import math
 from itertools import zip_longest
+import time
+import copy
 
 class Engine:
   def __init__(self,
@@ -14,7 +17,7 @@ class Engine:
          optimizer,
          dataloader_train,
          dataloader_val,
-         config,
+         Train_config,
          device,
          cur_epoch=0):
     self.cur_epoch = cur_epoch
@@ -24,60 +27,126 @@ class Engine:
     self.optimizer = optimizer
     self.dataloader_train = dataloader_train
     self.dataloader_val = dataloader_val
-    self.config = config
+    self.Train_config = Train_config
     self.device = device
     self.step = 0
+    self.exec_time_train = []
+    self.exec_time_val = []
+    self.metrics_best = {}
+    self.epoch_best = 0
   
   def train(self):
+    tic = time.perf_counter()
     self.model_wrapper.train()
-    torch.autograd.set_detect_anomaly(True) #detect invalid grad
+    torch.autograd.set_detect_anomaly(False) #detect invalid grad
     num_batches = 0
     loss_epoch = 0.0
+    self.model_wrapper.init_metrics()
 
     for i, data in enumerate(tqdm(self.dataloader_train)):
       self.optimizer.zero_grad()
       pred, label, loss, tmp_loss_individual = self.model_wrapper.load_data_compute_loss(data)
       loss.backward()
 
-      if self.config.use_grad_clip:
+      if self.Train_config.use_grad_clip:
         # Since the gradients of optimizers assigned params are now unscaled, we can clip as usual.
         torch.nn.utils.clip_grad_norm_(self.model_wrapper.parameters(),
-                      max_norm=int(self.config.grad_clip_max_norm),
+                      max_norm=int(self.Train_config.grad_clip_max_norm),
                       error_if_nonfinite=True)
         
       self.optimizer.step()
       num_batches += 1
       loss_epoch += float(loss.item())
+      self.model_wrapper.cal_metrics_batch()
 
+    metrics = self.model_wrapper.cal_metrics_epoch()
     print(f'-----------Loss_Train {loss_epoch/len(self.dataloader_train)}----------')
     self.model_wrapper.plot_model_out()
 
     if self.cur_epoch == 0:
       self.train_loss = []
       self.train_loss.append(loss_epoch/len(self.dataloader_train))
+
+      self.train_metrics = {}
+      for key, value in metrics.items():
+        self.train_metrics[key] = []
+        self.train_metrics[key].append(value)
     else:
       self.train_loss.append(loss_epoch/len(self.dataloader_train))
 
-  def validate(self):
-    self.model_wrapper.eval()
+      for key, value in metrics.items():
+        self.train_metrics[key].append(value)
 
-    num_batches = 0
-    loss_epoch = 0.0
+    toc = time.perf_counter() - tic
+    self.exec_time_train.append(toc/3600)
+
+  def validate(self):
     if len(self.dataloader_val) != 0:
+      tic = time.perf_counter()
+      self.model_wrapper.eval()
+      self.model_wrapper.init_metrics()
+
+      num_batches = 0
+      loss_epoch = 0.0
       with torch.no_grad():
         for data in tqdm(self.dataloader_val):
           pred, label, loss, tmp_loss_individual = self.model_wrapper.load_data_compute_loss(data)
           num_batches += 1
           loss_epoch += float(loss.item())
+          self.model_wrapper.cal_metrics_batch()
 
+        metrics = self.model_wrapper.cal_metrics_epoch()
         print(f'-----------Loss_Validate {loss_epoch/len(self.dataloader_val)}----------')
         self.model_wrapper.plot_model_out()
 
       if self.cur_epoch == 0:
         self.val_loss = []
         self.val_loss.append(loss_epoch/len(self.dataloader_val))
+        
+        self.val_metrics = {}
+        for key, value in metrics.items():
+          self.val_metrics[key] = []
+          self.val_metrics[key].append(value)
       else:
         self.val_loss.append(loss_epoch/len(self.dataloader_val))
+
+        for key, value in metrics.items():
+          self.val_metrics[key].append(value)
+
+      toc = time.perf_counter() - tic
+      self.exec_time_val.append(toc/3600)
+
+  def early_stopping(self, epoch):
+    if not hasattr(self, "unupdate_cnt"):
+            self.unupdate_cnt = 0
+
+    if len(self.dataloader_val) != 0:
+
+      val_metrics_latest = {}
+      for key, value in self.val_metrics.items():
+          val_metrics_latest[key] = value[-1]
+
+      if not self.metrics_best:
+        self.metrics_best = copy.deepcopy(val_metrics_latest)
+        self.epoch_best = epoch
+        self.unupdate_cnt = 0
+        
+      elif self.model_wrapper.compare_metrics(self.metrics_best, val_metrics_latest):
+        self.unupdate_cnt = 0
+        self.metrics_best = copy.deepcopy(val_metrics_latest)
+        self.epoch_best = epoch
+
+      else:
+        self.unupdate_cnt += 1
+
+      if self.unupdate_cnt >= self.Train_config.early_stopping_th:
+        return True
+      else:
+        return False
+
+    else:
+      return False
+
 
   def plot_data(self):
     steer = torch.tensor([])
@@ -208,22 +277,128 @@ class Engine:
     plt.show(block=False)
     plt.pause(1)
 
+  def plot_metrics(self):
+    if not hasattr(self, 'ax_metrics'):
+      num_metrics = len(self.Train_config.plot_metrics)
+      rows = min(4, num_metrics)
+      cols = math.ceil(num_metrics / rows)
 
+      base_w = 8
+      base_h = 2
+      figsize = (cols * base_w, rows * base_h)
 
-  def save(self, model_save_dir):
-    model_file = os.path.join(model_save_dir, f'model_{self.cur_epoch:04d}.pth')
+      _, self.ax_metrics = plt.subplots(rows, cols, figsize=figsize)
+      self.ax_metrics = np.array(self.ax_metrics).reshape(-1)
+
+    graph_idx = 0
+    for key in self.Train_config.plot_metrics:
+      self.ax_metrics[graph_idx].clear()
+      metrics = self.train_metrics[key]
+      if isinstance(metrics[0], (list, tuple, np.ndarray)):
+        cmap = plt.get_cmap("tab10", len(metrics[0])).colors
+
+        if hasattr(self, "val_metrics"):
+          val_metrics = list(zip(*self.val_metrics[key]))
+        
+        for class_idx, metrics_class in enumerate(zip(*metrics)):
+          color = cmap[class_idx]
+          self.ax_metrics[graph_idx].plot(range(len(metrics)), metrics_class, color=color, linestyle='-', label = f"Class_{class_idx}_Train")
+          if hasattr(self, "val_metrics"):
+            self.ax_metrics[graph_idx].plot(range(len(metrics)), val_metrics[class_idx], color=color, linestyle='--', label = f"Class_{class_idx}_Val")
+      else:
+        self.ax_metrics[graph_idx].plot(range(len(metrics)), metrics, label = "Train")
+        if hasattr(self, "val_metrics"):
+          self.ax_metrics[graph_idx].plot(range(len(metrics)), self.val_metrics[key], label = "Val")
+      self.ax_metrics[graph_idx].set_xlabel("epoch")
+      self.ax_metrics[graph_idx].set_ylabel(key)
+      self.ax_metrics[graph_idx].grid(True)
+      self.ax_metrics[graph_idx].legend()
+      graph_idx += 1
+
+    plt.show(block=False)
+    plt.pause(1)
+
+  def save(self, model_save_dir, config_set, epoch = None):
+    if epoch is not None:
+      model_file = os.path.join(model_save_dir, f"model_{epoch:04d}.pth")
+    else:
+      model_file = os.path.join(model_save_dir, f'model_latest.pth')
     torch.save(self.model_wrapper.state_dict(), model_file)
 
-    json_config = jsonpickle.encode(self.config)
-    with open(os.path.join(model_save_dir, 'config.json'), 'w') as f2:
-      f2.write(json_config)
+    for conf_name, config in config_set.items():
+      json_config = jsonpickle.encode(config, indent=2)
+      with open(os.path.join(model_save_dir, f'{conf_name}.json'), 'w') as f2:
+        f2.write(json_config)
 
-    epochs = range(len(self.train_loss))
-    with open(os.path.join(model_save_dir, 'loss_log.csv'), 'w', newline="") as f3:
-        writer = csv.writer(f3)
-        writer.writerow(["epoch", "train_loss", "val_loss"])
-        for e, tr, vl in zip_longest(epochs, self.train_loss, self.val_loss):
-            writer.writerow([e, tr, vl])
+    self.save_log(model_save_dir, epoch)
+
+  def save_log(self, model_save_dir, epoch = None):
+
+    has_val_loss = hasattr(self, 'val_loss') and len(self.val_loss) > 0
+    has_val_metrics = hasattr(self, 'val_metrics') and len(self.val_metrics) > 0
+    
+    def build_header():
+      row = ["epoch", "loss_train"]
+      if  has_val_loss:
+        row.append("loss_val")
+      row.append("time_train(h)")
+      if  has_val_loss:
+        row.append("time_val(h)")
+      for key, value in self.train_metrics.items():
+        if isinstance(value[0], (list, tuple, np.ndarray)):
+          for class_idx in range(len(value[0])):
+            row.append(f"{key}_{class_idx}_train")
+            if has_val_metrics:
+              row.append(f"{key}_{class_idx}_val")
+        else:
+          row.append(f"{key}_train")
+          if has_val_metrics:
+              row.append(f"{key}_val")
+      return row
+
+    def build_data(epoch):
+      data = [epoch, self.train_loss[epoch]]
+      if  has_val_loss:
+        data.append(self.val_loss[epoch])
+
+      data.append(self.exec_time_train[epoch])
+      if  has_val_loss:
+        data.append(self.exec_time_val[epoch])
+
+      for key, value in self.train_metrics.items():
+        if isinstance(value[0], (list, tuple, np.ndarray)):
+          for class_idx in range(len(value[0])):
+            data.append(value[epoch][class_idx])
+            if has_val_metrics:
+              data.append(self.val_metrics[key][epoch][class_idx])
+        else:
+          data.append(value[epoch])
+          if has_val_metrics:
+            data.append(self.val_metrics[key][epoch])
+      return data
+
+    log_path = os.path.join(model_save_dir, 'log.csv')
+    if epoch is None:
+      with open(log_path, 'w', newline="") as log:
+        writer = csv.writer(log)
+
+        row = build_header()
+        writer.writerow(row)
+
+        for epoch in range(len(self.train_loss)):
+          data = build_data(epoch)
+          writer.writerow(data)
+    else:
+      log_exists = os.path.exists(log_path)
+      with open(log_path, 'a', newline="") as log:
+        writer = csv.writer(log)
+
+        if not log_exists:
+          row = build_header()
+          writer.writerow(row)
+
+        data = build_data(epoch)
+        writer.writerow(data)
 
 class Model_wrapper:
   def __init__(self, model, config, device):
@@ -251,5 +426,22 @@ class Model_wrapper:
   def state_dict(self):
     return self.model.state_dict()
   
-  def plot_model_out():
+  def plot_model_out(self):
     return
+
+  def init_metrics(self):
+    return
+
+  def cal_metrics_batch(self):
+    return
+
+  def cal_metrics_epoch(self):
+    metrics = {}
+    return metrics
+
+  def compare_metrics(self, metrics_left, metrics_right):
+    """
+    Return True if metrics_right is better than metrics_left.
+    Input metrics should be same structure as return value of self.cal_metrics_epoch(). 
+    """
+    return True

@@ -29,7 +29,7 @@ from agents.tools.misc import (is_within_distance, get_trafficlight_trigger_loca
 
 from agents.navigation.local_planner import LocalPlanner
 
-from common.config import GlobalConfig
+from common.config.DataAgent_conf import DataAgent_conf
 from kinematic_bicycle_model import KinematicBicycleModel
 from lateral_controller import LateralPIDController
 
@@ -45,7 +45,7 @@ class DataAgent(AutoPilot):
   def setup(self, path_to_conf_file, route_index=None, traffic_manager=None):
     super().setup(path_to_conf_file, route_index, traffic_manager=None)
     #--------overwrite config----------------
-    self.config = GlobalConfig()
+    self.config = DataAgent_conf()
     self.ego_model = KinematicBicycleModel(self.config)
     self.vehicle_model = KinematicBicycleModel(self.config)
     self._turn_controller = LateralPIDController(self.config)
@@ -186,32 +186,35 @@ class DataAgent(AutoPilot):
             })
 
       if self.config.gen_depth:
-        result.append({
-          'type': 'sensor.camera.depth',
-          'x': self.config.camera_pos[0],
-          'y': self.config.camera_pos[1],
-          'z': self.config.camera_pos[2],
-          'roll': self.config.camera_rot_0[0],
-          'pitch': self.config.camera_rot_0[1],
-          'yaw': self.config.camera_rot_0[2],
-          'width': self.config.camera_width,
-          'height': self.config.camera_height,
-          'fov': self.config.camera_fov,
-          'id': 'depth'
-        })
-        result.append({
-          'type': 'sensor.camera.depth',
-          'x': self.config.camera_pos[0],
-          'y': self.config.camera_pos[1] + self.augmentation_translation,
-          'z': self.config.camera_pos[2],
-          'roll': self.config.camera_rot_0[0],
-          'pitch': self.config.camera_rot_0[1],
-          'yaw': self.config.camera_rot_0[2] + self.augmentation_rotation,
-          'width': self.config.camera_width,
-          'height': self.config.camera_height,
-          'fov': self.config.camera_fov,
-          'id': 'depth_augmented'
-        })
+        for idx, camera in enumerate(self.config.cameras):
+          tmp_trans, tmp_rot = conv_NuScenes2Carla(camera.trans, camera.get_rot_mat())
+          if camera.name == 'CAM_FRONT':
+            result.append({
+            'type': 'sensor.camera.depth',
+            'x': tmp_trans[0],
+            'y': tmp_trans[1],
+            'z': tmp_trans[2],
+            'roll': np.degrees(tmp_rot[0]),
+            'pitch': np.degrees(tmp_rot[1]),
+            'yaw': np.degrees(tmp_rot[2]),
+            'width': camera.W,
+            'height': camera.H,
+            'fov': np.degrees(camera.fov),
+            'id': 'depth'
+            })
+            result.append({
+            'type': 'sensor.camera.depth',
+            'x': tmp_trans[0],
+            'y': tmp_trans[1] + self.augmentation_translation,
+            'z': tmp_trans[2],
+            'roll': np.degrees(tmp_rot[0]),
+            'pitch': np.degrees(tmp_rot[1]),
+            'yaw': np.degrees(tmp_rot[2]) + self.augmentation_rotation,
+            'width': camera.W,
+            'height': camera.H,
+            'fov': np.degrees(camera.fov),
+            'id': 'depth_augmented'
+            })
 
       if self.config.gen_lidar:
         result.append({
@@ -228,32 +231,35 @@ class DataAgent(AutoPilot):
         })
 
       if self.config.gen_semantics:
-        result.append({
-          'type': 'sensor.camera.semantic_segmentation',
-          'x': self.config.camera_pos[0],
-          'y': self.config.camera_pos[1],
-          'z': self.config.camera_pos[2],
-          'roll': self.config.camera_rot_0[0],
-          'pitch': self.config.camera_rot_0[1],
-          'yaw': self.config.camera_rot_0[2],
-          'width': self.config.camera_width,
-          'height': self.config.camera_height,
-          'fov': self.config.camera_fov,
-          'id': 'semantics'
-        })
-        result.append({
-          'type': 'sensor.camera.semantic_segmentation',
-          'x': self.config.camera_pos[0],
-          'y': self.config.camera_pos[1] + self.augmentation_translation,
-          'z': self.config.camera_pos[2],
-          'roll': self.config.camera_rot_0[0],
-          'pitch': self.config.camera_rot_0[1],
-          'yaw': self.config.camera_rot_0[2] + self.augmentation_rotation,
-          'width': self.config.camera_width,
-          'height': self.config.camera_height,
-          'fov': self.config.camera_fov,
-          'id': 'semantics_augmented'
-        })
+        for idx, camera in enumerate(self.config.cameras):
+          tmp_trans, tmp_rot = conv_NuScenes2Carla(camera.trans, camera.get_rot_mat())
+          if camera.name == 'CAM_FRONT':
+            result.append({
+            'type': 'sensor.camera.semantic_segmentation',
+            'x': tmp_trans[0],
+            'y': tmp_trans[1],
+            'z': tmp_trans[2],
+            'roll': np.degrees(tmp_rot[0]),
+            'pitch': np.degrees(tmp_rot[1]),
+            'yaw': np.degrees(tmp_rot[2]),
+            'width': camera.W,
+            'height': camera.H,
+            'fov': np.degrees(camera.fov),
+            'id': 'semantics'
+            })
+            result.append({
+            'type': 'sensor.camera.semantic_segmentation',
+            'x': tmp_trans[0],
+            'y': tmp_trans[1] + self.augmentation_translation,
+            'z': tmp_trans[2],
+            'roll': np.degrees(tmp_rot[0]),
+            'pitch': np.degrees(tmp_rot[1]),
+            'yaw': np.degrees(tmp_rot[2]) + self.augmentation_rotation,
+            'width': camera.W,
+            'height': camera.H,
+            'fov': np.degrees(camera.fov),
+            'id': 'semantics_augmented'
+            })
 
     return result
 

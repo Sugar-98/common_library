@@ -4,12 +4,19 @@ from imgaug import augmenters as ia
 from common.utils import post_augument, nomalize_image, bev_post_augument, rot_cam_coordi_sys
 
 class Process_Images:
-  def __init__(self, config, shared_dict, images, images_augmented, validation=False):
+  def __init__(self, 
+              config, 
+              shared_dict, 
+              images, 
+              images_augmented, 
+              cameras, 
+              validation=False):
     self.images = images
     self.images_augmented = images_augmented
     self.data_cache = shared_dict
     self.config = config
     self.validation = validation
+    self.cameras = cameras
 
     self.image_augmenter_func = image_augmenter(config.color_aug_prob, cutout=config.use_cutout)
 
@@ -19,7 +26,7 @@ class Process_Images:
     loaded_images, loaded_images_augmented = self.load_data(index)
 
     loaded_images = loaded_images[self.config.seq_len - 1]
-    loaded_images_augmented = [self.config.seq_len - 1]
+    loaded_images_augmented = loaded_images_augmented [self.config.seq_len - 1]
 
     imgs = []
     rots = []
@@ -34,17 +41,16 @@ class Process_Images:
       if self.config.use_color_aug and not self.validation:
         img = self.image_augmenter_func(image=img)
 
-      if self.config.use_post_augment:
-        img, post_rot, post_tran = post_augument(img, self.config.data_aug_conf, self.validation)
+      if self.config.use_post_augment and not self.validation:
+        img, post_rot, post_tran = post_augument(img, self.config.data_aug_conf, augmentation=True)
       else:
-        post_rot = None
-        post_tran = None
+        img, post_rot, post_tran = post_augument(img, self.config.data_aug_conf, augmentation=False)
 
       img = nomalize_image(img, self.config.rgb_mean, self.config.rgb_std)
 
       
 
-      camera = self.config.cameras[idx]
+      camera = self.cameras[idx]
       imgs.append(np.transpose(img, (2, 0, 1)))
       intrins.append(camera.intrins)
       rots.append(camera.get_rot_mat())
@@ -63,11 +69,6 @@ class Process_Images:
     data["trans"] = trans
     data["post_rots"] = np.array(post_rots)
     data["post_trans"] = np.array(post_trans)
-    
-    if self.config.use_PilotNet:
-      imgs[0] = self.down_sampling(imgs[0], self.config.PilotNet_H, self.config.PilotNet_W)
-    elif self.config.use_CIL:
-      imgs[0] = self.down_sampling(imgs[0], self.config.CIL_H, self.config.CIL_W)
     
     # The transpose change the image into pytorch (C,H,W) format
     data['rgb'] = np.transpose(imgs[0], (2, 0, 1))
@@ -91,7 +92,7 @@ class Process_Images:
       imgs_each_camera = images[i]
 
       imgs = []
-      for cmr_idx in range(self.config.num_cameras):
+      for cmr_idx in range(len(self.cameras)):
         cache_key = str(imgs_each_camera[cmr_idx], encoding='utf-8')
 
         # Retrieve data from the disc cache
@@ -102,7 +103,7 @@ class Process_Images:
         # Load data from the disc
         else:
           img_path = str(imgs_each_camera[cmr_idx], encoding='utf-8')
-          camera_name = self.config.cameras[cmr_idx].name
+          camera_name = self.cameras[cmr_idx].name
           camera_dir = "/" + f"{camera_name:0>20}"
           img_path = img_path.replace(camera_dir, "/" + camera_name)#Decode padding for camera name
           img = cv2.imread(img_path, cv2.IMREAD_COLOR)
@@ -120,7 +121,7 @@ class Process_Images:
         cache_key_aug = str(images_augmented[i], encoding='utf-8')
 
         # Retrieve data from the disc cache
-        if not self.data_cache is None and cache_key in self.data_cache:
+        if not self.data_cache is None and cache_key_aug in self.data_cache:
           img_augmented = self.data_cache[cache_key_aug]
           img_augmented = cv2.imdecode(img_augmented, cv2.IMREAD_UNCHANGED)
         
@@ -145,14 +146,15 @@ class Process_Images:
     return resized_image
   
 class Process_Bev:
-  def __init__(self, config, shared_dict, bev_semantics, bev_semantics_augmented, validation=False):
+  def __init__(self, config, shared_dict, bev_semantics, bev_semantics_augmented, bev_config, validation=False):
     self.bev_semantics = bev_semantics
     self.bev_semantics_augmented = bev_semantics_augmented
     self.data_cache = shared_dict
     self.config = config
+    self.bev_config = bev_config
     self.validation = validation
 
-    self.bev_converter = np.uint8(self.config.bev_converter)
+    self.bev_converter = np.uint8(bev_config["bev_converter"])
 
   def process_data(self, index, use_augment_sample):
     data = {}
@@ -171,13 +173,13 @@ class Process_Bev:
 
     # NOTE the BEV label can unfortunately only be saved up to 2.0 ppm resolution. We upscale it here.
     # If you change these values you might need to change the up-scaling as well.
-    assert self.config.pixels_per_meter == 4.0
-    assert self.config.pixels_per_meter_collection == 2.0
-    assert self.config.lidar_resolution_width == 256
-    assert self.config.lidar_resolution_height == 256
-    assert self.config.max_x == 32
-    assert self.config.min_x == -32
-    if self.config.pixels_per_meter == 4.0:
+    assert self.bev_config["pixels_per_meter"] == 4.0
+    assert self.bev_config["pixels_per_meter_collection"] == 2.0
+    assert self.bev_config["lidar_resolution_width"] == 256
+    assert self.bev_config["lidar_resolution_height"] == 256
+    assert self.bev_config["max_x"] == 32
+    assert self.bev_config["min_x"] == -32
+    if self.bev_config["pixels_per_meter"] == 4.0:
       bev_semantics_i = bev_semantics_i[64:192, 64:192].repeat(2, axis=0).repeat(2, axis=1)
 
     for cls in self.config.ignore_class:
