@@ -64,14 +64,12 @@ class Process_Images:
       trans, rots = rot_cam_coordi_sys(trans, rots, bev_postaug_rot)
 
     data["rgb_multi_cam"] = np.array(imgs)
+    data['rgb'] = np.array(imgs[0])
     data["intrins"] = np.array(intrins)
     data["rots"] = rots
     data["trans"] = trans
     data["post_rots"] = np.array(post_rots)
     data["post_trans"] = np.array(post_trans)
-    
-    # The transpose change the image into pytorch (C,H,W) format
-    data['rgb'] = np.transpose(imgs[0], (2, 0, 1))
 
     # plt.imshow(processed_image)
     # plt.show(block=False)
