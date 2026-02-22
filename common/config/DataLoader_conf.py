@@ -110,3 +110,7 @@ class DataLoader_conf:
     self.use_bev_post_augment = False
     self.ignore_class = []
     self.use_wp_gru = False  # Whether to use the WP output GRU.
+    self.wp_dilation = 1  # Factor by which the wp are dilated compared to full CARLA 20 FPS
+    self.num_route_points = 20  # Number of route points to use
+    self.smooth_route = True  # Whether to smooth the route points with spline interpolation
+    self.dense_route_planner_min_distance = 2.4  # Min distance for route planner interpolation
