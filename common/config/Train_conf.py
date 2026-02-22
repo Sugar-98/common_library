@@ -27,8 +27,6 @@ class Train_conf:
     self.zero_redundancy_optimizer = 1
     self.use_disk_cache = 0  # Whether disc cache was used during training
     self.detect_boxes = 0  # Whether to use the bounding box auxiliary task
-    # Number of route points we use for prediction in TF or input in planT
-    self.num_route_points = 20
     self.learn_origin = 1  # Whether to learn the origin of the waypoints or use 0 / 0
     # At which interval to save debug files to disk during training
     self.train_debug_save_freq = 1
@@ -83,7 +81,6 @@ class Train_conf:
     self.use_depth = False  # Whether to use depth prediction as auxiliary loss for training.
     self.continue_epoch = True  # Whether to continue the training from the loaded epoch or from 0.
 
-    self.smooth_route = True  # Whether to smooth the route points with a spline.
     self.ignore_index = -999  # Index to ignore for future bounding box prediction task.
     self.use_speed_weights = False  # Whether to weight target speed classes
     self.use_optim_groups = False  # Whether to use optimizer groups to exclude some parameters from weight decay

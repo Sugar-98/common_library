@@ -1,4 +1,3 @@
-
 import torch
 from tqdm import tqdm
 import jsonpickle
@@ -15,18 +14,18 @@ class Engine:
   def __init__(self,
          model_wrapper,
          optimizer,
-         dataloader_train,
-         dataloader_val,
-         Train_config,
-         device,
+         dataloader_train=None,  # Make dataloader_train optional
+         dataloader_val=None,
+         Train_config=None,
+         device=None,
          cur_epoch=0):
     self.cur_epoch = cur_epoch
     self.train_loss = []
     self.val_loss = []
     self.model_wrapper = model_wrapper
     self.optimizer = optimizer
-    self.dataloader_train = dataloader_train
-    self.dataloader_val = dataloader_val
+    self.dataloader_train = dataloader_train if dataloader_train is not None else []  # Default to empty list
+    self.dataloader_val = dataloader_val if dataloader_val is not None else []  # Default to empty list
     self.Train_config = Train_config
     self.device = device
     self.step = 0
@@ -36,6 +35,10 @@ class Engine:
     self.epoch_best = 0
   
   def train(self):
+    if not self.dataloader_train:  # Check if dataloader_train is provided
+      print("No training dataloader provided. Skipping training.")
+      return
+
     tic = time.perf_counter()
     self.model_wrapper.train()
     torch.autograd.set_detect_anomaly(False) #detect invalid grad
@@ -334,45 +337,63 @@ class Engine:
 
   def save_log(self, model_save_dir, epoch = None):
 
+    has_train_loss = hasattr(self, 'train_loss') and len(self.train_loss) > 0
     has_val_loss = hasattr(self, 'val_loss') and len(self.val_loss) > 0
     has_val_metrics = hasattr(self, 'val_metrics') and len(self.val_metrics) > 0
-    
+
     def build_header():
-      row = ["epoch", "loss_train"]
-      if  has_val_loss:
+      row = []
+      if has_train_loss:
+        row.append("epoch")
+        row.append("loss_train")
+        row.append("time_train(h)")
+      if has_val_loss:
         row.append("loss_val")
-      row.append("time_train(h)")
-      if  has_val_loss:
         row.append("time_val(h)")
-      for key, value in self.train_metrics.items():
-        if isinstance(value[0], (list, tuple, np.ndarray)):
-          for class_idx in range(len(value[0])):
-            row.append(f"{key}_{class_idx}_train")
+      if has_train_loss or has_val_metrics:  # Include metrics even if only validation metrics exist
+        metrics_source = self.train_metrics if has_train_loss else self.val_metrics
+        for key, value in metrics_source.items():
+          if isinstance(value[0], (list, tuple, np.ndarray)):
+            for class_idx in range(len(value[0])):
+              if has_train_loss:
+                row.append(f"{key}_{class_idx}_train")
+              if has_val_metrics:
+                row.append(f"{key}_{class_idx}_val")
+          else:
+            if has_train_loss:
+              row.append(f"{key}_train")
             if has_val_metrics:
-              row.append(f"{key}_{class_idx}_val")
-        else:
-          row.append(f"{key}_train")
-          if has_val_metrics:
               row.append(f"{key}_val")
       return row
 
     def build_data(epoch):
-      data = [epoch, self.train_loss[epoch]]
-      if  has_val_loss:
+      data = []
+      if has_train_loss:
+        data.append(epoch)
+        data.append(self.train_loss[epoch])
+        data.append(self.exec_time_train[epoch])
+      elif has_val_loss:  # Add epoch even if only validation data exists
+        data.append(epoch)
+        data.append(None)  # Placeholder for train loss
+        data.append(None)  # Placeholder for train time
+      if has_val_loss:
         data.append(self.val_loss[epoch])
-
-      data.append(self.exec_time_train[epoch])
-      if  has_val_loss:
         data.append(self.exec_time_val[epoch])
-
-      for key, value in self.train_metrics.items():
+      metrics_source = self.train_metrics if has_train_loss else self.val_metrics
+      for key, value in metrics_source.items():
         if isinstance(value[0], (list, tuple, np.ndarray)):
           for class_idx in range(len(value[0])):
-            data.append(value[epoch][class_idx])
+            if has_train_loss:
+              data.append(value[epoch][class_idx])
+            elif has_val_metrics:
+              data.append(None)  # Placeholder for train metrics
             if has_val_metrics:
               data.append(self.val_metrics[key][epoch][class_idx])
         else:
-          data.append(value[epoch])
+          if has_train_loss:
+            data.append(value[epoch])
+          elif has_val_metrics:
+            data.append(None)  # Placeholder for train metrics
           if has_val_metrics:
             data.append(self.val_metrics[key][epoch])
       return data
@@ -385,7 +406,8 @@ class Engine:
         row = build_header()
         writer.writerow(row)
 
-        for epoch in range(len(self.train_loss)):
+        max_epochs = max(len(self.train_loss), len(self.val_loss)) if has_train_loss or has_val_loss else 0
+        for epoch in range(max_epochs):
           data = build_data(epoch)
           writer.writerow(data)
     else:

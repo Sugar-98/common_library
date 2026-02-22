@@ -18,7 +18,7 @@ from imgaug import augmenters as ia
 import pickle
 import re
 import matplotlib.pyplot as plt
-from train_lib.process_data import Process_Images, Process_Bev
+from train_lib.process_data import Process_Images, Process_Bev, Process_Measurements
 
 
 class CARLA_Data(Dataset):  # pylint: disable=locally-disabled, invalid-name
@@ -64,6 +64,7 @@ class CARLA_Data(Dataset):  # pylint: disable=locally-disabled, invalid-name
     self.future_boxes = []
     self.measurements = []
     self.sample_start = []
+    self.towns = []
 
     self.temporal_lidars = []
     self.temporal_measurements = []
@@ -257,6 +258,7 @@ class CARLA_Data(Dataset):  # pylint: disable=locally-disabled, invalid-name
           self.future_boxes.append(future_box)
           self.measurements.append(measurement)
           self.sample_start.append(seq)
+          self.towns.append(town)
 
     if estimate_class_distributions:
       classes_target_speeds = np.unique(self.speed_distribution)
@@ -314,6 +316,7 @@ class CARLA_Data(Dataset):  # pylint: disable=locally-disabled, invalid-name
           self.temporal_lidars = [self.temporal_lidars[idx] for idx in indices]
           self.temporal_measurements = [self.temporal_measurements[idx] for idx in indices]
         self.sample_start = [self.sample_start[idx] for idx in indices]
+        self.towns = [self.towns[idx] for idx in indices]
 
         self.num_data = num_max_data
 
@@ -345,6 +348,7 @@ class CARLA_Data(Dataset):  # pylint: disable=locally-disabled, invalid-name
     self.temporal_lidars = np.array(self.temporal_lidars).astype(np.string_)
     self.temporal_measurements = np.array(self.temporal_measurements).astype(np.string_)
     self.sample_start = np.array(self.sample_start)
+    self.towns = np.array(self.towns)
     if rank == 0:
       print(f'Loading {self.num_data} sample from {len(root)} folders')
       print('Total amount of routes:', total_routes)
@@ -363,6 +367,7 @@ class CARLA_Data(Dataset):  # pylint: disable=locally-disabled, invalid-name
 
     self.process_images = Process_Images(self.DataLoader_config, self.data_cache, self.images, self.images_augmented, cameras = self.DataAgent_config.cameras, validation=self.validation)
     self.process_bev = Process_Bev(self.DataLoader_config, self.data_cache, self.bev_semantics, self.bev_semantics_augmented, bev_config = bev_config, validation=self.validation)
+    self.process_measurements = Process_Measurements(self.DataLoader_config, self.data_cache, self.measurements, self.sample_start, validation=self.validation)
 
   def __len__(self):
     """Returns the length of the dataset. """
@@ -384,8 +389,10 @@ class CARLA_Data(Dataset):  # pylint: disable=locally-disabled, invalid-name
     if self.DataLoader_config.use_bev_semantic:
       data_bev, bev_postaug_rot = self.process_bev.process_data(index, use_augment_sample)
     data_images = self.process_images.process_data(index, use_augment_sample, bev_postaug_rot)
+    data_measurements = self.process_measurements.process_data(index, use_augment_sample)
 
-    data = data_images | data_bev
+    data = data_images | data_bev | data_measurements
+    data['town'] = int(self.towns[index])
 
     return data
 
