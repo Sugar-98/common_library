@@ -4,6 +4,7 @@ import numpy as np
 
 class DataAgent_conf(Agent_conf):
   def __init__(self):
+    super().__init__()
     # -----------------------------------------------------------------------------
     # DataAgent
     # -----------------------------------------------------------------------------
@@ -22,8 +23,8 @@ class DataAgent_conf(Agent_conf):
     self.point_format = 0  # LARS point format used for storing
     self.point_precision = 0.01  # Precision up to which LiDAR points are stored
     
-    self.conf_enable_disturbance = False #Add steering disturbance for agent
-    self.conf_plot_control = False #Plot control signals during data collection
+    self.conf_enable_disturbance = True #Add steering disturbance for agent
+    self.conf_plot_control = True #Plot control signals during data collection
     # -----------------------------------------------------------------------------
     # Sensor config
     # -----------------------------------------------------------------------------
@@ -166,3 +167,24 @@ class DataAgent_conf(Agent_conf):
     ])
     # Minimum throttle value that has an affect during forecasting the ego vehicle.
     self.throttle_threshold_during_forecasting = 0.3
+
+    # -----------------------------------------------------------------------------
+    # Bounding Box
+    # -----------------------------------------------------------------------------
+    self.bb_save_radius = 64.0  # Radius in meters for saving bounding boxes
+
+    # -----------------------------------------------------------------------------
+    # Lateral PID Controller (from GlobalConfig)
+    # -----------------------------------------------------------------------------
+    self.points_per_meter = 10
+    self.lateral_pid_kp = 3.118357247806046
+    self.lateral_pid_kd = 1.3782508892109167
+    self.lateral_pid_ki = 0.6406067986034124
+    self.lateral_pid_speed_scale = 0.9755321901954155
+    self.lateral_pid_speed_offset = 1.9152884533402488
+    self.lateral_pid_default_lookahead = 2.4 * self.points_per_meter
+    self.lateral_pid_speed_threshold = 2.3150102938235136 * self.points_per_meter
+    self.lateral_pid_window_size = 6
+    self.lateral_pid_minimum_lookahead_distance = 2.4 * self.points_per_meter
+    self.lateral_pid_maximum_lookahead_distance = 10.5 * self.points_per_meter
+    self.route_points = 10  # Number of route points to render in logger

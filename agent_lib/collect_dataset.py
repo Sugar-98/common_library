@@ -88,6 +88,8 @@ def main():
 
     scenarios = glob.glob(scenario_path, recursive=True)
 
+    print(f"Skip data collection for scenarios with existing checkpoints (*.json files). ")
+
     for scenario in scenarios:
         routes = glob.glob(f"{scenario}/*.xml")
 

@@ -45,14 +45,14 @@ class DataAgent(AutoPilot):
   def setup(self, path_to_conf_file, route_index=None, traffic_manager=None):
     super().setup(path_to_conf_file, route_index, traffic_manager=None)
     #--------overwrite config----------------
-    self.config = DataAgent_conf()
-    self.ego_model = KinematicBicycleModel(self.config)
-    self.vehicle_model = KinematicBicycleModel(self.config)
-    self._turn_controller = LateralPIDController(self.config)
+    self.data_agent_config = DataAgent_conf()
+    self.ego_model = KinematicBicycleModel(self.data_agent_config)
+    self.vehicle_model = KinematicBicycleModel(self.data_agent_config)
+    self._turn_controller = LateralPIDController(self.data_agent_config)
     #----------------------------------------
     #-------configuration for data agent----------------------
-    self.conf_enable_disturbance = self.config.conf_enable_disturbance
-    self.conf_plot_control = self.config.conf_plot_control
+    self.conf_enable_disturbance = self.data_agent_config.conf_enable_disturbance
+    self.conf_plot_control = self.data_agent_config.conf_plot_control
     #---------------------------------------------------------
     self.weather_tmp = None
     self.step_tmp = 0
@@ -63,23 +63,23 @@ class DataAgent(AutoPilot):
     self.cutin_vehicle_starting_position = None
 
     if self.save_path is not None and self.datagen:
-      if self.config.gen_lidar:
+      if self.data_agent_config.gen_lidar:
         (self.save_path / 'lidar').mkdir()
-      if self.config.gen_rgb:
+      if self.data_agent_config.gen_rgb:
         (self.save_path / 'rgb').mkdir()
         (self.save_path / 'rgb_augmented').mkdir()
-        for idx, camera in enumerate(self.config.cameras):
+        for idx, camera in enumerate(self.data_agent_config.cameras):
           (self.save_path / 'rgb' / camera.name).mkdir()
-      if self.config.gen_semantics:
+      if self.data_agent_config.gen_semantics:
         (self.save_path / 'semantics').mkdir()
         (self.save_path / 'semantics_augmented').mkdir()
-      if self.config.gen_depth:
+      if self.data_agent_config.gen_depth:
         (self.save_path / 'depth').mkdir()
         (self.save_path / 'depth_augmented').mkdir()
-      if self.config.gen_bev_semantics:
+      if self.data_agent_config.gen_bev_semantics:
         (self.save_path / 'bev_semantics').mkdir()
         (self.save_path / 'bev_semantics_augmented').mkdir()
-      if self.config.gen_boxes:
+      if self.data_agent_config.gen_boxes:
         (self.save_path / 'boxes').mkdir()
 
     self.tmp_visu = int(os.environ.get('TMP_VISU', 0))
@@ -118,9 +118,9 @@ class DataAgent(AutoPilot):
       self.shuffle_weather()
 
     obs_config = {
-        'width_in_pixels': self.config.lidar_resolution_width,
-        'pixels_ev_to_bottom': self.config.lidar_resolution_height / 2.0,
-        'pixels_per_meter': self.config.pixels_per_meter_collection,
+        'width_in_pixels': self.data_agent_config.lidar_resolution_width,
+        'pixels_ev_to_bottom': self.data_agent_config.lidar_resolution_height / 2.0,
+        'pixels_per_meter': self.data_agent_config.pixels_per_meter_collection,
         'history_idx': [-1],
         'scale_bbox': True,
         'scale_mask_col': 1.0,
@@ -128,10 +128,10 @@ class DataAgent(AutoPilot):
     }
 
     self.stop_sign_criteria = RunStopSign(self._world)
-    self.ss_bev_manager = ObsManager(obs_config, self.config)
+    self.ss_bev_manager = ObsManager(obs_config, self.data_agent_config)
     self.ss_bev_manager.attach_ego_vehicle(self._vehicle, criteria_stop=self.stop_sign_criteria)
 
-    self.ss_bev_manager_augmented = ObsManager(obs_config, self.config)
+    self.ss_bev_manager_augmented = ObsManager(obs_config, self.data_agent_config)
 
     bb_copy = carla.BoundingBox(self._vehicle.bounding_box.location, self._vehicle.bounding_box.extent)
     transform_copy = carla.Transform(self._vehicle.get_transform().location, self._vehicle.get_transform().rotation)
@@ -145,17 +145,17 @@ class DataAgent(AutoPilot):
 
   def sensors(self):
     # workaraound that only does data augmentation at the beginning of the route
-    if self.config.augment:
-      self.augmentation_translation = np.random.uniform(low=self.config.camera_translation_augmentation_min,
-                                                        high=self.config.camera_translation_augmentation_max)
-      self.augmentation_rotation = np.random.uniform(low=self.config.camera_rotation_augmentation_min,
-                                                     high=self.config.camera_rotation_augmentation_max)
+    if self.data_agent_config.augment:
+      self.augmentation_translation = np.random.uniform(low=self.data_agent_config.camera_translation_augmentation_min,
+                                                        high=self.data_agent_config.camera_translation_augmentation_max)
+      self.augmentation_rotation = np.random.uniform(low=self.data_agent_config.camera_rotation_augmentation_min,
+                                                     high=self.data_agent_config.camera_rotation_augmentation_max)
 
     result = super().sensors()
 
     if self.save_path is not None and (self.datagen or self.tmp_visu):
-      if self.config.gen_rgb:
-        for idx, camera in enumerate(self.config.cameras):
+      if self.data_agent_config.gen_rgb:
+        for idx, camera in enumerate(self.data_agent_config.cameras):
           tmp_trans, tmp_rot = conv_NuScenes2Carla(camera.trans, camera.get_rot_mat())
           result.append({
           'type': 'sensor.camera.rgb',
@@ -185,8 +185,8 @@ class DataAgent(AutoPilot):
             'id': 'rgb_augmented'
             })
 
-      if self.config.gen_depth:
-        for idx, camera in enumerate(self.config.cameras):
+      if self.data_agent_config.gen_depth:
+        for idx, camera in enumerate(self.data_agent_config.cameras):
           tmp_trans, tmp_rot = conv_NuScenes2Carla(camera.trans, camera.get_rot_mat())
           if camera.name == 'CAM_FRONT':
             result.append({
@@ -216,22 +216,22 @@ class DataAgent(AutoPilot):
             'id': 'depth_augmented'
             })
 
-      if self.config.gen_lidar:
+      if self.data_agent_config.gen_lidar:
         result.append({
           'type': 'sensor.lidar.ray_cast',
-          'x': self.config.lidar_pos[0],
-          'y': self.config.lidar_pos[1],
-          'z': self.config.lidar_pos[2],
-          'roll': self.config.lidar_rot[0],
-          'pitch': self.config.lidar_rot[1],
-          'yaw': self.config.lidar_rot[2],
-          'rotation_frequency': self.config.lidar_rotation_frequency,
-          'points_per_second': self.config.lidar_points_per_second,
+          'x': self.data_agent_config.lidar_pos[0],
+          'y': self.data_agent_config.lidar_pos[1],
+          'z': self.data_agent_config.lidar_pos[2],
+          'roll': self.data_agent_config.lidar_rot[0],
+          'pitch': self.data_agent_config.lidar_rot[1],
+          'yaw': self.data_agent_config.lidar_rot[2],
+          'rotation_frequency': self.data_agent_config.lidar_rotation_frequency,
+          'points_per_second': self.data_agent_config.lidar_points_per_second,
           'id': 'lidar'
         })
 
-      if self.config.gen_semantics:
-        for idx, camera in enumerate(self.config.cameras):
+      if self.data_agent_config.gen_semantics:
+        for idx, camera in enumerate(self.data_agent_config.cameras):
           tmp_trans, tmp_rot = conv_NuScenes2Carla(camera.trans, camera.get_rot_mat())
           if camera.name == 'CAM_FRONT':
             result.append({
@@ -267,16 +267,16 @@ class DataAgent(AutoPilot):
     result = {}
 
     if self.save_path is not None and (self.datagen or self.tmp_visu):
-      if self.config.gen_rgb:
+      if self.data_agent_config.gen_rgb:
         rgb = {}
-        for idx, camera in enumerate(self.config.cameras):
+        for idx, camera in enumerate(self.data_agent_config.cameras):
           rgb[camera.name] = input_data[camera.name][1][:, :, :3]
         rgb_augmented = input_data['rgb_augmented'][1][:, :, :3]
       else:
         rgb = None
         rgb_augmented = None
 
-      if self.config.gen_depth:
+      if self.data_agent_config.gen_depth:
         # We store depth at 8 bit to reduce the filesize. 16 bit would be ideal, but we can't afford the extra storage.
         depth = input_data['depth'][1][:, :, :3]
         depth = (t_u.convert_depth(depth) * 255.0 + 0.5).astype(np.uint8)
@@ -287,7 +287,7 @@ class DataAgent(AutoPilot):
         depth = None
         depth_augmented = None
 
-      if self.config.gen_semantics:
+      if self.data_agent_config.gen_semantics:
         semantics = input_data['semantics'][1][:, :, 2]
         semantics_augmented = input_data['semantics_augmented'][1][:, :, 2]
       else:
@@ -305,7 +305,7 @@ class DataAgent(AutoPilot):
     # The 10 Hz LiDAR only delivers half a sweep each time step at 20 Hz.
     # Here we combine the 2 sweeps into the same coordinate system
     if self.last_lidar is not None:
-      if self.config.gen_lidar:
+      if self.data_agent_config.gen_lidar:
         ego_transform = self._vehicle.get_transform()
         ego_location = ego_transform.location
         last_ego_location = self.last_ego_transform.location
@@ -331,32 +331,32 @@ class DataAgent(AutoPilot):
       else:
         lidar_360 = input_data['lidar']  # The first frame only has 1 half
 
-    if self.config.gen_boxes:
+    if self.data_agent_config.gen_boxes:
       bounding_boxes = self.get_bounding_boxes(lidar=lidar_360)
 
-    if self.config.gen_bev_semantics:
+    if self.data_agent_config.gen_bev_semantics:
       self.stop_sign_criteria.tick(self._vehicle)
       bev_semantics = self.ss_bev_manager.get_observation(self.close_traffic_lights)
       bev_semantics_augmented = self.ss_bev_manager_augmented.get_observation(self.close_traffic_lights)
 
-    if self.tmp_visu and self.config.gen_boxes and self.config.gen_rgb:
+    if self.tmp_visu and self.data_agent_config.gen_boxes and self.data_agent_config.gen_rgb:
       self.visualuize(bev_semantics['rendered'], rgb['rgb_Front'])
 
-    if self.config.gen_lidar:
+    if self.data_agent_config.gen_lidar:
       result['lidar'] = lidar_360
-    if self.config.gen_rgb:
+    if self.data_agent_config.gen_rgb:
       result['rgb'] = rgb
       result['rgb_augmented'] = rgb_augmented
-    if self.config.gen_semantics:
+    if self.data_agent_config.gen_semantics:
       result['semantics'] = semantics
       result['semantics_augmented'] = semantics_augmented
-    if self.config.gen_depth:
+    if self.data_agent_config.gen_depth:
       result['depth'] = depth
       result['depth_augmented'] = depth_augmented
-    if self.config.gen_bev_semantics:
+    if self.data_agent_config.gen_bev_semantics:
       result['bev_semantics'] = bev_semantics['bev_semantic_classes']
       result['bev_semantics_augmented'] = bev_semantics_augmented['bev_semantic_classes']
-    if self.config.gen_boxes:
+    if self.data_agent_config.gen_boxes:
       result['bounding_boxes'] = bounding_boxes
 
     return result
@@ -365,9 +365,9 @@ class DataAgent(AutoPilot):
   def run_step(self, input_data, timestamp, sensors=None, plant=False):
     self.step_tmp += 1
 
-    if self.config.gen_lidar:
+    if self.data_agent_config.gen_lidar:
       # Convert LiDAR into the coordinate frame of the ego vehicle
-      input_data['lidar'] = t_u.lidar_to_ego_coordinate(self.config, input_data['lidar'])
+      input_data['lidar'] = t_u.lidar_to_ego_coordinate(self.data_agent_config, input_data['lidar'])
 
     # Must be called before run_step, so that the correct augmentation shift is saved
     if self.datagen:
@@ -377,11 +377,11 @@ class DataAgent(AutoPilot):
 
     tick_data = self.tick(input_data)
 
-    if self.step % self.config.data_save_freq == 0:
+    if self.step % self.data_agent_config.data_save_freq == 0:
       if self.save_path is not None and self.datagen:
         self.save_sensors(tick_data)
 
-    if self.config.gen_lidar:
+    if self.data_agent_config.gen_lidar:
       self.last_lidar = input_data['lidar']
       self.last_ego_transform = self._vehicle.get_transform()
 
@@ -466,33 +466,33 @@ class DataAgent(AutoPilot):
         vehicle.set_light_state(carla.VehicleLightState.NONE)
 
   def save_sensors(self, tick_data):
-    frame = self.step // self.config.data_save_freq
+    frame = self.step // self.data_agent_config.data_save_freq
 
     # CARLA images are already in opencv's BGR format.
-    if self.config.gen_rgb:
+    if self.data_agent_config.gen_rgb:
       rgb = tick_data['rgb']
-      for idx, camera in enumerate(self.config.cameras):
+      for idx, camera in enumerate(self.data_agent_config.cameras):
         cv2.imwrite(str(self.save_path / 'rgb' / camera.name /(f'{frame:04}.jpg')), rgb[camera.name])
       cv2.imwrite(str(self.save_path / 'rgb_augmented' / (f'{frame:04}.jpg')), tick_data['rgb_augmented'])
 
-    if self.config.gen_semantics:
+    if self.data_agent_config.gen_semantics:
       cv2.imwrite(str(self.save_path / 'semantics' / (f'{frame:04}.png')), tick_data['semantics'])
       cv2.imwrite(str(self.save_path / 'semantics_augmented' / (f'{frame:04}.png')), tick_data['semantics_augmented'])
 
-    if self.config.gen_depth:
+    if self.data_agent_config.gen_depth:
       cv2.imwrite(str(self.save_path / 'depth' / (f'{frame:04}.png')), tick_data['depth'])
       cv2.imwrite(str(self.save_path / 'depth_augmented' / (f'{frame:04}.png')), tick_data['depth_augmented'])
 
-    if self.config.gen_bev_semantics:
+    if self.data_agent_config.gen_bev_semantics:
       cv2.imwrite(str(self.save_path / 'bev_semantics' / (f'{frame:04}.png')), tick_data['bev_semantics'])
       cv2.imwrite(str(self.save_path / 'bev_semantics_augmented' / (f'{frame:04}.png')),
                   tick_data['bev_semantics_augmented'])
 
     # Specialized LiDAR compression format
-    if self.config.gen_lidar:
-      header = laspy.LasHeader(point_format=self.config.point_format)
+    if self.data_agent_config.gen_lidar:
+      header = laspy.LasHeader(point_format=self.data_agent_config.point_format)
       header.offsets = np.min(tick_data['lidar'], axis=0)
-      header.scales = np.array([self.config.point_precision, self.config.point_precision, self.config.point_precision])
+      header.scales = np.array([self.data_agent_config.point_precision, self.data_agent_config.point_precision, self.data_agent_config.point_precision])
 
       with laspy.open(self.save_path / 'lidar' / (f'{frame:04}.laz'), mode='w', header=header) as writer:
         point_record = laspy.ScaleAwarePointRecord.zeros(tick_data['lidar'].shape[0], header=header)
@@ -502,7 +502,7 @@ class DataAgent(AutoPilot):
 
         writer.write_points(point_record)
 
-    if self.config.gen_boxes:
+    if self.data_agent_config.gen_boxes:
       with gzip.open(self.save_path / 'boxes' / (f'{frame:04}.json.gz'), 'wt', encoding='utf-8') as f:
         json.dump(tick_data['bounding_boxes'], f, indent=4)
 
@@ -552,7 +552,7 @@ class DataAgent(AutoPilot):
     results.append(result)
 
     for vehicle in vehicle_list:
-      if vehicle.get_location().distance(self._vehicle.get_location()) < self.config.bb_save_radius:
+      if vehicle.get_location().distance(self._vehicle.get_location()) < self.data_agent_config.bb_save_radius:
         if vehicle.id != self._vehicle.id:
           vehicle_transform = vehicle.get_transform()
           vehicle_rotation = vehicle_transform.rotation
@@ -600,7 +600,7 @@ class DataAgent(AutoPilot):
 
     walkers = self._actors.filter('*walker*')
     for walker in walkers:
-      if walker.get_location().distance(self._vehicle.get_location()) < self.config.bb_save_radius:
+      if walker.get_location().distance(self._vehicle.get_location()) < self.data_agent_config.bb_save_radius:
         walker_transform = walker.get_transform()
         walker_velocity = walker.get_velocity()
         walker_rotation = walker.get_transform().rotation
@@ -639,7 +639,7 @@ class DataAgent(AutoPilot):
     # Note this only saves static actors, which does not include static background objects
     static_list = self._actors.filter('*static*')
     for static in static_list:
-      if static.get_location().distance(self._vehicle.get_location()) < self.config.bb_save_radius:
+      if static.get_location().distance(self._vehicle.get_location()) < self.data_agent_config.bb_save_radius:
         static_transform = static.get_transform()
         static_velocity = static.get_velocity()
         static_rotation = static.get_transform().rotation
